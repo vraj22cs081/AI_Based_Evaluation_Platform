@@ -19,6 +19,18 @@ const StudentAssignmentView = ({ assignments, onSubmit }) => {
                         <div>
                             <h3 className="text-xl font-semibold">{assignment.title}</h3>
                             <p className="text-gray-600">{assignment.description}</p>
+                            {assignment.assignmentFile && (
+                                <div className="mt-2">
+                                    <a 
+                                        href={`http://localhost:9000${assignment.assignmentFile}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-blue-500 hover:text-blue-700 text-sm"
+                                    >
+                                        View Assignment PDF
+                                    </a>
+                                </div>
+                            )}
                         </div>
                         <div className="text-right">
                             <p className="text-sm text-gray-500">
@@ -36,14 +48,16 @@ const StudentAssignmentView = ({ assignments, onSubmit }) => {
                             <p className="text-sm text-gray-600">
                                 Submitted on: {formatDate(assignment.submission.submittedAt)}
                             </p>
-                            <a 
-                                href={assignment.submission.submissionUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:text-blue-700 text-sm"
-                            >
-                                View Your Submission
-                            </a>
+                            {assignment.submission.submissionUrl && (
+                                <a 
+                                    href={`http://localhost:9000${assignment.submission.submissionUrl}`}
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-blue-500 hover:text-blue-700 text-sm"
+                                >
+                                    View Your Submission
+                                </a>
+                            )}
                             {assignment.submission.grade !== null && (
                                 <div className="mt-2">
                                     <p className="font-medium">

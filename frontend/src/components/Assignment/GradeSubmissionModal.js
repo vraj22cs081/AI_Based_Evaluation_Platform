@@ -47,14 +47,16 @@ const GradeSubmissionModal = ({ submission, assignment, onClose, onGraded }) => 
                 <div className="mb-4">
                     <p className="text-gray-600">Assignment: {assignment.title}</p>
                     <p className="text-gray-600">Student: {submission.student.name}</p>
-                    <a 
-                        href={submission.submissionUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:text-blue-700"
-                    >
-                        View Submission
-                    </a>
+                    {submission.submissionUrl && (
+                        <a 
+                            href={`http://localhost:9000${submission.submissionUrl}`}
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:text-blue-700 text-sm"
+                        >
+                            View Submission PDF
+                        </a>
+                    )}
                 </div>
 
                 <form onSubmit={handleSubmit}>

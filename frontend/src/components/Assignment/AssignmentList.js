@@ -30,6 +30,19 @@ const AssignmentList = ({ assignments, onGrade }) => {
                         </div>
                     </div>
 
+                    {assignment.assignmentFile && (
+                        <div className="mt-2">
+                            <a 
+                                href={`http://localhost:9000${assignment.assignmentFile}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:text-blue-700 text-sm"
+                            >
+                                View Assignment PDF
+                            </a>
+                        </div>
+                    )}
+
                     <div className="mt-4">
                         <h4 className="font-semibold mb-2">
                             Submissions ({assignment.submissions.length})
@@ -57,6 +70,16 @@ const AssignmentList = ({ assignments, onGrade }) => {
                                             {submission.grade ? 'Update Grade' : 'Grade'}
                                         </button>
                                     </div>
+                                    {submission.submissionUrl && (
+                                        <a 
+                                            href={`http://localhost:9000${submission.submissionUrl}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-500 hover:text-blue-700 text-sm"
+                                        >
+                                            View Submission PDF
+                                        </a>
+                                    )}
                                 </div>
                             ))}
                             {assignment.submissions.length === 0 && (
