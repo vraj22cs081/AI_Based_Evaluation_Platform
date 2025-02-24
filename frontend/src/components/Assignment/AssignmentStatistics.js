@@ -19,41 +19,103 @@ ChartJS.register(
     Legend
 );
 
-const AssignmentStatistics = ({ statistics }) => {
+const AssignmentStatistics = ({ assignment }) => {
+    // Calculate statistics
+    const totalStudents = assignment.enrolledStudents?.length || 0;
+    const totalSubmissions = assignment.submissions?.length || 0;
+    const submissionRate = totalStudents ? (totalSubmissions / totalStudents) * 100 : 0;
+    const gradedSubmissions = assignment.submissions?.filter(sub => sub.grade !== undefined).length || 0;
+    const gradingProgress = totalSubmissions ? (gradedSubmissions / totalSubmissions) * 100 : 0;
+    const averageGrade = gradedSubmissions ? 
+        (assignment.submissions?.reduce((sum, sub) => sum + (sub.grade || 0), 0) || 0) / gradedSubmissions : 0;
+
     const gradeData = {
-        labels: Object.keys(statistics.gradeDistribution),
+        labels: Object.keys(assignment.gradeDistribution),
         datasets: [
             {
                 label: 'Number of Students',
-                data: Object.values(statistics.gradeDistribution),
+                data: Object.values(assignment.gradeDistribution),
                 backgroundColor: 'rgba(53, 162, 235, 0.5)',
             },
         ],
     };
 
     return (
-        <div className="bg-white rounded-lg p-6 shadow">
-            <h2 className="text-xl font-semibold mb-4">Assignment Statistics</h2>
+        <div style={{
+            backgroundColor: 'white',
+            borderRadius: '0.5rem',
+            padding: '1rem',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+        }}>
+            <h3 style={{ fontSize: '1.125rem', fontWeight: '600', marginBottom: '1rem', color: '#1f2937' }}>
+                Assignment Statistics
+            </h3>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="bg-blue-50 p-4 rounded">
-                    <h3 className="font-semibold text-gray-700">Submission Status</h3>
-                    <p className="text-gray-600">
-                        Total Students: {statistics.totalStudents}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div style={{ 
+                    backgroundColor: '#eff6ff', 
+                    padding: '1rem', 
+                    borderRadius: '0.375rem' 
+                }}>
+                    <h4 style={{ fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                        Submission Status
+                    </h4>
+                    <p style={{ color: '#4b5563', marginBottom: '0.25rem' }}>
+                        Total Students: {totalStudents}
                     </p>
-                    <p className="text-gray-600">
-                        Submissions: {statistics.totalSubmissions} ({Math.round(statistics.submissionRate)}%)
+                    <p style={{ color: '#4b5563' }}>
+                        Submissions: {totalSubmissions} ({Math.round(submissionRate)}%)
                     </p>
                 </div>
                 
-                <div className="bg-green-50 p-4 rounded">
-                    <h3 className="font-semibold text-gray-700">Grading Progress</h3>
-                    <p className="text-gray-600">
-                        Graded: {statistics.gradedSubmissions} ({Math.round(statistics.gradingProgress)}%)
+                <div style={{ 
+                    backgroundColor: '#f0fdf4', 
+                    padding: '1rem', 
+                    borderRadius: '0.375rem' 
+                }}>
+                    <h4 style={{ fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                        Grading Progress
+                    </h4>
+                    <p style={{ color: '#4b5563', marginBottom: '0.25rem' }}>
+                        Graded: {gradedSubmissions} ({Math.round(gradingProgress)}%)
                     </p>
-                    <p className="text-gray-600">
-                        Average Grade: {Math.round(statistics.averageGrade * 10) / 10}
+                    <p style={{ color: '#4b5563' }}>
+                        Average Grade: {Math.round(averageGrade * 10) / 10}
                     </p>
+                </div>
+            </div>
+
+            <div>
+                <h4 style={{ fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                    Recent Submissions
+                </h4>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {assignment.submissions?.slice(0, 5).map((submission) => (
+                        <div key={submission._id} style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '0.5rem',
+                            backgroundColor: '#f9fafb',
+                            borderRadius: '0.375rem'
+                        }}>
+                            <div>
+                                <p style={{ fontWeight: '500' }}>{submission.student?.name}</p>
+                                <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                                    {new Date(submission.submittedAt).toLocaleDateString()}
+                                </p>
+                            </div>
+                            <div style={{ fontSize: '0.875rem' }}>
+                                {submission.grade !== undefined ? (
+                                    <span style={{ color: '#059669', fontWeight: '500' }}>
+                                        {submission.grade}/{assignment.maxMarks}
+                                    </span>
+                                ) : (
+                                    <span style={{ color: '#d97706' }}>Pending</span>
+                                )}
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -79,4 +141,4 @@ const AssignmentStatistics = ({ statistics }) => {
     );
 };
 
-export default AssignmentStatistics; 
+export default AssignmentStatistics;

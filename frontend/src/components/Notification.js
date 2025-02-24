@@ -1,26 +1,40 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 const Notification = ({ type, message, onClose }) => {
-    const bgColor = type === 'success' ? 'bg-green-100' : 'bg-red-100';
-    const textColor = type === 'success' ? 'text-green-700' : 'text-red-700';
-    const borderColor = type === 'success' ? 'border-green-400' : 'border-red-400';
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            onClose();
+        }, 3000); // Auto dismiss after 3 seconds
+
+        return () => clearTimeout(timer);
+    }, [onClose]);
 
     return (
-        <div className={`${bgColor} border ${borderColor} ${textColor} px-4 py-3 rounded relative mb-4`} role="alert">
-            <span className="block sm:inline">{message}</span>
-            {onClose && (
-                <span 
-                    className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer"
-                    onClick={onClose}
-                >
-                    <svg className="fill-current h-6 w-6" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
-                        <title>Close</title>
-                        <path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.029a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/>
-                    </svg>
-                </span>
-            )}
+        <div 
+            className={`notification ${type}`}
+            style={{
+                position: 'fixed',
+                top: '20px',
+                right: '20px',
+                maxWidth: '300px',
+                padding: '12px 20px',
+                borderRadius: '8px',
+                backgroundColor: 'white',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                zIndex: 1050,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                animation: 'slideIn 0.3s ease-out',
+                border: `2px solid ${type === 'success' ? '#10B981' : '#EF4444'}`
+            }}
+        >
+            <i className={`bi ${type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-circle-fill'}`} 
+               style={{ color: type === 'success' ? '#10B981' : '#EF4444' }}
+            />
+            <span style={{ fontSize: '0.875rem' }}>{message}</span>
         </div>
     );
 };
 
-export default Notification; 
+export default Notification;

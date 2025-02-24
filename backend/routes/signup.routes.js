@@ -14,6 +14,17 @@ router.post("/signup", async (req, res) => {
             return res.status(400).json({ success: false, message: "All fields are required" });
         }
 
+        // Check admin limit if role is Admin
+        if (role === 'Admin') {
+            const adminCount = await User.countDocuments({ role: 'Admin' });
+            if (adminCount >= 2) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: "Maximum number of admins (2) has been reached. Cannot register new admin." 
+                });
+            }
+        }
+
         const existingUser = await User.findOne({ email });
         if (existingUser) {
             return res.status(400).json({ success: false, message: "Email already registered" });
@@ -137,6 +148,23 @@ router.get('/status', async (req, res) => {
         res.status(401).json({
             isAuthenticated: false,
             message: 'Invalid token'
+        });
+    }
+});
+
+// Add this new route
+router.get("/check-admin-limit", async (req, res) => {
+    try {
+        const adminCount = await User.countDocuments({ role: 'Admin' });
+        res.json({ 
+            success: true, 
+            adminLimitReached: adminCount >= 2 
+        });
+    } catch (error) {
+        console.error('Error checking admin limit:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: "Error checking admin limit" 
         });
     }
 });

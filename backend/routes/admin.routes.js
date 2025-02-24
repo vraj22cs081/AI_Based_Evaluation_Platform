@@ -8,7 +8,7 @@ const authMiddleware = require('../middleware/auth.middleware');
 router.get('/users', authMiddleware('Admin'), async (req, res) => {
     try {
         const users = await User.find().select('-password');
-        res.json({
+        res.json({ 
             success: true,
             users
         });

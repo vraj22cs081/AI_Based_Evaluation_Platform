@@ -109,8 +109,8 @@ router.put('/classrooms/:classroomId', authMiddleware('Faculty'), async (req, re
 
         await classroom.save();
 
-        // Send invitation emails to new students
-        if (studentEmails && studentEmails.length > 0) {
+        // Ensure studentEmails is an array before processing
+        if (Array.isArray(studentEmails) && studentEmails.length > 0) {
             console.log('Sending invites to new students:', studentEmails);
             const emailPromises = studentEmails.map(email => 
                 sendInviteEmail(email, classroom.roomCode, faculty.name, classroom.name)
@@ -121,7 +121,6 @@ router.put('/classrooms/:classroomId', authMiddleware('Faculty'), async (req, re
                 console.log('All invitation emails sent successfully');
             } catch (emailError) {
                 console.error('Error sending some invitation emails:', emailError);
-                // Continue execution even if some emails fail
             }
         }
 
@@ -511,6 +510,52 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/grade', authMi
     }
 });
 
+// Update grade route
+router.put('/assignments/:assignmentId/submissions/:submissionId/grade', authMiddleware('Faculty'), async (req, res) => {
+    try {
+        const { assignmentId, submissionId } = req.params;
+        const { grade, feedback } = req.body;
+        const facultyId = req.user._id;
+
+        const assignment = await Assignment.findOne({
+            _id: assignmentId,
+            createdBy: facultyId
+        }).populate('submissions.student', 'name email');
+
+        if (!assignment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Assignment not found or unauthorized'
+            });
+        }
+
+        const submission = assignment.submissions.id(submissionId);
+        if (!submission) {
+            return res.status(404).json({
+                success: false,
+                message: 'Submission not found'
+            });
+        }
+
+        submission.grade = grade;
+        submission.feedback = feedback;
+        await assignment.save();
+
+        res.json({
+            success: true,
+            message: 'Grade updated successfully',
+            submission
+        });
+
+    } catch (error) {
+        console.error('Error updating grade:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update grade'
+        });
+    }
+});
+
 // Delete assignment
 router.delete('/assignments/:assignmentId', authMiddleware('Faculty'), async (req, res) => {
     try {
@@ -779,4 +824,4 @@ router.get('/student/assignments', authMiddleware('Student'), async (req, res) =
     }
 });
 
-module.exports = router; 
+module.exports = router;

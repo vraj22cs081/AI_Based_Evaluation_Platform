@@ -3,260 +3,207 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import LoadingSpinner from '../LoadingSpinner';
-import Notification from '../Notification';
+import Header from '../header/Header';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
 const AdminDashboard = () => {
     const [users, setUsers] = useState([]);
     const [classrooms, setClassrooms] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+    const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('users');
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(10);
-    const { logout, userName } = useAuth();
+    const { logout } = useAuth();
     const navigate = useNavigate();
 
-    // Fetch Data
-    const fetchData = async () => {
+    const alphabetColors = {
+        'A': 'bg-danger',        
+        'B': 'bg-primary',       
+        'C': 'bg-success',       
+        'D': 'bg-warning',       
+        'E': 'bg-info',          
+        'F': 'bg-secondary',     
+        'G': 'bg-dark',          
+        'H': 'bg-primary',       
+        'I': 'bg-success',       
+        'J': 'bg-danger',        
+        'K': 'bg-warning',       
+        'L': 'bg-info',          
+        'M': 'bg-secondary',     
+        'N': 'bg-dark',          
+        'O': 'bg-danger',        
+        'P': 'bg-primary',       
+        'Q': 'bg-success',       
+        'R': 'bg-warning',       
+        'S': 'bg-info',          
+        'T': 'bg-secondary',     
+        'U': 'bg-dark',          
+        'V': 'bg-danger',        
+        'W': 'bg-primary',       
+        'X': 'bg-success',       
+        'Y': 'bg-warning',       
+        'Z': 'bg-info'           
+    };
+
+    const fetchUsers = async () => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            
-            const [usersRes, classroomsRes] = await Promise.all([
-                axios.get('http://localhost:9000/api/admin/users', {
-                    headers: { Authorization: `Bearer ${token}` }
-                }),
-                axios.get('http://localhost:9000/api/admin/classrooms', {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
-            ]);
-
-            setUsers(usersRes.data.users);
-            setClassrooms(classroomsRes.data.classrooms);
-            setError('');
+            const response = await axios.get('http://localhost:9000/api/admin/users', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setUsers(response.data.users);
         } catch (error) {
-            setError(error.response?.data?.message || 'Failed to fetch data');
+            alert(error.response?.data?.message || 'Failed to fetch users');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchClassrooms = async () => {
+        try {
+            setLoading(true);
+            const token = localStorage.getItem('token');
+            const response = await axios.get('http://localhost:9000/api/admin/classrooms', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            setClassrooms(response.data.classrooms);
+        } catch (error) {
+            alert(error.response?.data?.message || 'Failed to fetch classrooms');
         } finally {
             setLoading(false);
         }
     };
 
     useEffect(() => {
-        fetchData();
-    }, []);
+        // Initial load of users data
+        if (activeTab === 'users' && users.length === 0) {
+            fetchUsers();
+        }
+        // Initial load of classrooms data
+        if (activeTab === 'classrooms' && classrooms.length === 0) {
+            fetchClassrooms();
+        }
+    }, [activeTab]);
 
-    // Filter and Search Logic
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = (
-            user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        setCurrentPage(1);
+        setSearchTerm('');
+        setRoleFilter('all');
+        
+        // Only fetch if data hasn't been loaded yet
+        if (tab === 'users' && users.length === 0) {
+            fetchUsers();
+        } else if (tab === 'classrooms' && classrooms.length === 0) {
+            fetchClassrooms();
+        }
+    };
+
+    const handleDelete = async (id, type) => {
+        if (window.confirm(`Are you sure you want to delete this ${type}?`)) {
+            try {
+                const token = localStorage.getItem('token');
+                await axios.delete(`http://localhost:9000/api/admin/${type}/${id}`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                // Only refresh the current tab's data
+                if (type === 'users') {
+                    fetchUsers();
+                } else {
+                    fetchClassrooms();
+                }
+                alert(`${type.charAt(0).toUpperCase() + type.slice(1)} deleted successfully`);
+            } catch (error) {
+                alert(error.response?.data?.message || `Failed to delete ${type}`);
+            }
+        }
+    };
+
+    const getFilteredData = (data, type) => {
+        return data.filter(item =>
+            (item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                (type === 'users' ? item.email.toLowerCase() : item.subject.toLowerCase()).includes(searchTerm.toLowerCase())) &&
+            (type === 'users' ? (roleFilter === 'all' || item.role === roleFilter) : true)
         );
-        const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-        return matchesSearch && matchesRole;
-    });
-
-    const filteredClassrooms = classrooms.filter(classroom =>
-        classroom.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        classroom.subject.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-
-    // Pagination Logic
-    const indexOfLastItem = currentPage * itemsPerPage;
-    const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-    const currentUsers = filteredUsers.slice(indexOfFirstItem, indexOfLastItem);
-    const currentClassrooms = filteredClassrooms.slice(indexOfFirstItem, indexOfLastItem);
-    const totalPages = Math.ceil(
-        (activeTab === 'users' ? filteredUsers.length : filteredClassrooms.length) / itemsPerPage
-    );
-
-    // Action Handlers
-    const handleDeleteUser = async (userId) => {
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`http://localhost:9000/api/admin/users/${userId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setSuccess('User deleted successfully');
-            fetchData();
-        } catch (error) {
-            setError(error.response?.data?.message || 'Failed to delete user');
-        }
     };
 
-    const handleDeleteClassroom = async (classroomId) => {
-        try {
-            const token = localStorage.getItem('token');
-            await axios.delete(`http://localhost:9000/api/admin/classrooms/${classroomId}`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setSuccess('Classroom deleted successfully');
-            fetchData();
-        } catch (error) {
-            setError(error.response?.data?.message || 'Failed to delete classroom');
-        }
+    const getPaginatedData = (data) => {
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        return data.slice(startIndex, startIndex + itemsPerPage);
     };
 
-    const handleLogout = async () => {
-        try {
-            const token = localStorage.getItem('token');
-            await axios.post('http://localhost:9000/api/auth/logout', {}, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            logout();
-            navigate('/login');
-        } catch (error) {
-            setError('Logout failed');
-        }
+    const getColor = (name) => {
+        const firstLetter = name.charAt(0).toUpperCase();
+        return alphabetColors[firstLetter] || 'bg-secondary';
     };
 
-    // Render Functions
-    const renderPagination = () => (
-        <div className="flex justify-center mt-4 gap-2">
-            <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-            >
-                Previous
-            </button>
-            <span className="px-3 py-1">
-                Page {currentPage} of {totalPages}
-            </span>
-            <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="px-3 py-1 bg-gray-200 rounded disabled:opacity-50"
-            >
-                Next
-            </button>
-        </div>
-    );
-
-    const renderSearchAndFilters = () => (
-        <div className="mb-4 flex gap-4">
-            <input
-                type="text"
-                placeholder="Search..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="px-3 py-2 border rounded-lg"
-            />
-            {activeTab === 'users' && (
-                <select
-                    value={roleFilter}
-                    onChange={(e) => setRoleFilter(e.target.value)}
-                    className="px-3 py-2 border rounded-lg"
-                >
-                    <option value="all">All Roles</option>
-                    <option value="Admin">Admin</option>
-                    <option value="Faculty">Faculty</option>
-                    <option value="Student">Student</option>
-                </select>
-            )}
-        </div>
-    );
-
-    if (loading) return <LoadingSpinner />;
+    const displayedData = getPaginatedData(getFilteredData(activeTab === 'users' ? users : classrooms, activeTab));
 
     return (
-        <div className="min-h-screen bg-gray-50">
-            {/* Navigation */}
-            <nav className="bg-white shadow-md p-4">
-                <div className="flex justify-between items-center">
-                    <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-                    <div className="flex items-center gap-4">
-                        <span>Welcome, {userName}</span>
-                        <button
-                            onClick={handleLogout}
-                            className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-                        >
-                            Logout
-                        </button>
+        <div className="bg-light min-vh-100">
+            <Header />
+            <div className="container-fluid px-4 py-4 mt-5">
+                <div className="card shadow-sm border-0 rounded-lg overflow-hidden">
+                    <div className="card-header bg-white py-3 d-flex justify-content-between">
+                        <div className="nav nav-tabs card-header-tabs border-bottom-0">
+                            {['users', 'classrooms'].map(tab => (
+                                <button 
+                                    key={tab} 
+                                    className={`nav-link ${activeTab === tab ? 'active' : ''}`} 
+                                    onClick={() => handleTabChange(tab)}
+                                >
+                                    {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </div>
-            </nav>
-
-            {/* Main Content */}
-            <main className="container mx-auto p-4">
-                {error && (
-                    <Notification 
-                        type="error" 
-                        message={error} 
-                        onClose={() => setError('')}
-                    />
-                )}
-                {success && (
-                    <Notification 
-                        type="success" 
-                        message={success} 
-                        onClose={() => setSuccess('')}
-                    />
-                )}
-
-                {/* Tab Navigation */}
-                <div className="mb-6">
-                    <div className="flex gap-4">
-                        <button
-                            onClick={() => {
-                                setActiveTab('users');
-                                setCurrentPage(1);
-                            }}
-                            className={`px-4 py-2 rounded-lg transition-colors ${
-                                activeTab === 'users' 
-                                    ? 'bg-blue-500 text-white' 
-                                    : 'bg-gray-200 hover:bg-gray-300'
-                            }`}
-                        >
-                            Users
-                        </button>
-                        <button
-                            onClick={() => {
-                                setActiveTab('classrooms');
-                                setCurrentPage(1);
-                            }}
-                            className={`px-4 py-2 rounded-lg transition-colors ${
-                                activeTab === 'classrooms' 
-                                    ? 'bg-blue-500 text-white' 
-                                    : 'bg-gray-200 hover:bg-gray-300'
-                            }`}
-                        >
-                            Classrooms
-                        </button>
-                    </div>
-                </div>
-
-                {renderSearchAndFilters()}
-
-                {/* Content */}
-                <div className="bg-white rounded-lg shadow p-6">
-                    {activeTab === 'users' ? (
-                        <>
-                            <h2 className="text-xl font-semibold mb-4">User Management</h2>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full table-auto">
-                                    <thead className="bg-gray-50">
+                    <div className="card-body">
+                        <div className="row mb-3 align-items-center">
+                            <div className="col-md-6 mb-2">
+                                <input type="text" className="form-control border-primary" placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                            </div>
+                            {activeTab === 'users' && (
+                                <div className="col-md-6 mb-2">
+                                    <select className="form-select border-primary" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
+                                        <option value="all">All Roles</option>
+                                        <option value="Admin">Admin</option>
+                                        <option value="Faculty">Faculty</option>
+                                        <option value="Student">Student</option>
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+                        <h4 className="mb-3">{activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} List</h4>
+                        {loading ? (
+                            <LoadingSpinner />
+                        ) : (
+                            <div className="table-responsive">
+                                <table className="table table-striped">
+                                    <thead className="table-dark">
                                         <tr>
-                                            <th className="px-6 py-3 text-left">Name</th>
-                                            <th className="px-6 py-3 text-left">Email</th>
-                                            <th className="px-6 py-3 text-left">Role</th>
-                                            <th className="px-6 py-3 text-left">Actions</th>
+                                            <th>Name</th>
+                                            <th>{activeTab === 'users' ? 'Email' : 'Subject'}</th>
+                                            {activeTab === 'users' && <th className="text-center" style={{width: '150px'}}>Role</th>}
+                                            <th>Action</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {currentUsers.map(user => (
-                                            <tr key={user._id}>
-                                                <td className="px-6 py-4">{user.name}</td>
-                                                <td className="px-6 py-4">{user.email}</td>
-                                                <td className="px-6 py-4">{user.role}</td>
-                                                <td className="px-6 py-4">
-                                                    <button
-                                                        onClick={() => handleDeleteUser(user._id)}
-                                                        className="text-red-600 hover:text-red-900"
-                                                    >
-                                                        Delete
+                                    <tbody>
+                                        {displayedData.map(item => (
+                                            <tr key={item._id}>
+                                                <td className="d-flex align-items-center">
+                                                    <div className={`rounded-circle text-white d-flex align-items-center justify-content-center me-2 ${getColor(item.name)}`} style={{ width: '35px', height: '35px', fontWeight: 'bold' }}>
+                                                        {item.name[0].toUpperCase()}
+                                                    </div>
+                                                    {item.name.charAt(0).toUpperCase() + item.name.slice(1).toLowerCase()}
+                                                </td>
+                                                <td>{activeTab === 'users' ? item.email : item.subject}</td>
+                                                {activeTab === 'users' && <td className="text-center" style={{width: '150px'}}>{item.role}</td>}
+                                                <td>
+                                                    <button className="btn btn-danger btn-sm px-3" onClick={() => handleDelete(item._id, activeTab)}>
+                                                        Remove
                                                     </button>
                                                 </td>
                                             </tr>
@@ -264,48 +211,12 @@ const AdminDashboard = () => {
                                     </tbody>
                                 </table>
                             </div>
-                        </>
-                    ) : (
-                        <>
-                            <h2 className="text-xl font-semibold mb-4">Classroom Management</h2>
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full table-auto">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left">Name</th>
-                                            <th className="px-6 py-3 text-left">Subject</th>
-                                            <th className="px-6 py-3 text-left">Faculty</th>
-                                            <th className="px-6 py-3 text-left">Students</th>
-                                            <th className="px-6 py-3 text-left">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-white divide-y divide-gray-200">
-                                        {currentClassrooms.map(classroom => (
-                                            <tr key={classroom._id}>
-                                                <td className="px-6 py-4">{classroom.name}</td>
-                                                <td className="px-6 py-4">{classroom.subject}</td>
-                                                <td className="px-6 py-4">{classroom.faculty.name}</td>
-                                                <td className="px-6 py-4">{classroom.students.length}</td>
-                                                <td className="px-6 py-4">
-                                                    <button
-                                                        onClick={() => handleDeleteClassroom(classroom._id)}
-                                                        className="text-red-600 hover:text-red-900"
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </>
-                    )}
-                    {renderPagination()}
+                        )}
+                    </div>
                 </div>
-            </main>
+            </div>
         </div>
     );
 };
 
-export default AdminDashboard; 
+export default AdminDashboard;

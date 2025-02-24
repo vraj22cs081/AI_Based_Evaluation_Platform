@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const AssignmentModal = ({ classroom, onClose, onSubmit }) => {
+const AssignmentModal = ({ isEdit, initialData, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
-        title: '',
-        description: '',
-        dueDate: '',
-        maxMarks: ''
+        title: initialData?.title || '',
+        description: initialData?.description || '',
+        dueDate: initialData?.dueDate ? new Date(initialData.dueDate).toISOString().slice(0, 16) : '',
+        maxMarks: initialData?.maxMarks || ''
     });
     const [file, setFile] = useState(null);
     const [uploading, setUploading] = useState(false);
@@ -28,156 +28,155 @@ const AssignmentModal = ({ classroom, onClose, onSubmit }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!file) {
-            setError('Please select a file');
-            return;
-        }
-
         setUploading(true);
+        setError('');
+        
         try {
-            const sessionId = sessionStorage.getItem('sessionId');
-            const token = sessionStorage.getItem(`token_${sessionId}`);
-
-            // First upload the file
-            const formDataObj = new FormData();
-            formDataObj.append('file', file);
-
-            const uploadResponse = await axios.post(
-                'http://localhost:9000/api/faculty/upload',
-                formDataObj,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'X-Session-ID': sessionId,
-                        'Content-Type': 'multipart/form-data'
-                    }
-                }
-            );
-
-            if (uploadResponse.data.success) {
-                // Then create the assignment with the file URL
-                const assignmentData = {
-                    title: formData.title,
-                    description: formData.description,
-                    dueDate: formData.dueDate,
-                    maxMarks: parseInt(formData.maxMarks),
-                    assignmentFile: uploadResponse.data.fileUrl
-                };
-
-                // Updated URL to match the backend route
-                const response = await axios.post(
-                    `http://localhost:9000/api/faculty/classrooms/${classroom._id}/assignments`,
-                    assignmentData,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'X-Session-ID': sessionId
-                        }
-                    }
-                );
-
-                if (response.data.success) {
-                    onClose();
-                }
+            if (!formData.title || !formData.description || !formData.dueDate || !formData.maxMarks) {
+                throw new Error('All fields are required');
             }
+
+            const formDataObj = new FormData();
+            formDataObj.append('title', formData.title);
+            formDataObj.append('description', formData.description);
+            formDataObj.append('dueDate', formData.dueDate);
+            formDataObj.append('maxMarks', formData.maxMarks);
+            
+            if (file) {
+                formDataObj.append('assignmentFile', file);
+            }
+
+            await onSubmit(formDataObj);
         } catch (error) {
-            console.error('Assignment creation error:', error);
-            setError(error.response?.data?.message || 'Failed to create assignment');
+            console.error('Error with assignment:', error);
+            setError(error.message || 'Failed to process assignment');
         } finally {
             setUploading(false);
         }
     };
 
+    // Add onChange handler for form inputs
+    const handleChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({
+            ...prev,
+            [name]: value
+        }));
+    };
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <h2 className="text-xl font-semibold mb-4">Create New Assignment</h2>
-                <p className="text-gray-600 mb-4">For: {classroom.name}</p>
-                
-                <form onSubmit={handleSubmit}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Title</label>
-                            <input
-                                type="text"
-                                value={formData.title}
-                                onChange={(e) => setFormData({...formData, title: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                required
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Description</label>
-                            <textarea
-                                value={formData.description}
-                                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                rows="4"
-                                required
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Due Date</label>
-                            <input
-                                type="datetime-local"
-                                value={formData.dueDate}
-                                onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                required
-                            />
-                        </div>
-                        
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Maximum Marks</label>
-                            <input
-                                type="number"
-                                value={formData.maxMarks}
-                                onChange={(e) => setFormData({...formData, maxMarks: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                required
-                                min="0"
-                            />
-                        </div>
-                    </div>
-                    
-                    <div className="mt-4">
-                        <label className="block text-sm font-medium text-gray-700">
-                            Upload Assignment PDF (Max 5MB)
-                        </label>
+        <div className="modal-overlay" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+        }}>
+            <div className="modal-content" style={{
+                width: '90%',
+                maxWidth: '500px',
+                maxHeight: '90vh',
+                overflowY: 'auto',
+                padding: '1.5rem',
+                backgroundColor: 'white',
+                borderRadius: '0.75rem',
+                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                position: 'relative',
+                zIndex: 1001
+            }}>
+                {/* Header */}
+                <div className="d-flex justify-content-between align-items-center mb-4">
+                    <h2 className="h5 mb-0">{isEdit ? 'Edit Assignment' : 'Create Assignment'}</h2>
+                    <button onClick={onClose} className="btn-close"></button>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
+                    {/* Title */}
+                    <div>
+                        <label className="form-label small">Title</label>
                         <input
-                            type="file"
-                            accept=".pdf"
-                            onChange={handleFileChange}
-                            className="mt-1 block w-full text-sm text-gray-500
-                                file:mr-4 file:py-2 file:px-4
-                                file:rounded-full file:border-0
-                                file:text-sm file:font-semibold
-                                file:bg-blue-50 file:text-blue-700
-                                hover:file:bg-blue-100"
+                            type="text"
+                            name="title"
+                            value={formData.title}
+                            onChange={handleChange}
+                            className="form-control"
                             required
                         />
-                        {error && (
-                            <p className="text-red-500 text-sm mt-1">{error}</p>
-                        )}
                     </div>
 
-                    <div className="mt-6 flex justify-end gap-4">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="px-4 py-2 text-gray-700 hover:text-gray-900"
-                            disabled={uploading}
-                        >
+                    {/* Description */}
+                    <div>
+                        <label className="form-label small">Description</label>
+                        <textarea
+                            name="description"
+                            value={formData.description}
+                            onChange={handleChange}
+                            className="form-control"
+                            rows="3"
+                            required
+                        />
+                    </div>
+
+                    {/* Due Date and Max Marks in one row */}
+                    <div className="row">
+                        <div className="col-md-6">
+                            <label className="form-label small">Due Date</label>
+                            <input
+                                type="datetime-local"
+                                name="dueDate"
+                                value={formData.dueDate}
+                                onChange={handleChange}
+                                className="form-control"
+                                required
+                            />
+                        </div>
+                        <div className="col-md-6">
+                            <label className="form-label small">Max Marks</label>
+                            <input
+                                type="number"
+                                name="maxMarks"
+                                value={formData.maxMarks}
+                                onChange={handleChange}
+                                className="form-control"
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    {/* File Upload */}
+                    <div>
+                        <label className="form-label small">Assignment File (PDF only, max 5MB)</label>
+                        <div className="border rounded p-3 text-center bg-light">
+                            <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={handleFileChange}
+                                id="file-input"
+                                style={{ display: 'none' }}
+                            />
+                            <label htmlFor="file-input" className="mb-0" style={{ cursor: 'pointer' }}>
+                                <i className="bi bi-cloud-upload fs-4 text-primary"></i>
+                                <div className="small mt-1">
+                                    {file ? file.name : 'Click to upload PDF'}
+                                </div>
+                            </label>
+                        </div>
+                        {error && <div className="text-danger small mt-1">{error}</div>}
+                    </div>
+
+                    {/* Buttons */}
+                    <div className="d-flex justify-content-end gap-2 mt-3">
+                        <button type="button" className="btn btn-light" onClick={onClose}>
                             Cancel
                         </button>
-                        <button
-                            type="submit"
-                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
-                            disabled={uploading || !file}
-                        >
-                            {uploading ? 'Creating...' : 'Create Assignment'}
+                        <button type="submit" className="btn btn-primary" disabled={uploading}>
+                            {uploading ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update Assignment' : 'Create Assignment')}
                         </button>
                     </div>
                 </form>
@@ -186,4 +185,4 @@ const AssignmentModal = ({ classroom, onClose, onSubmit }) => {
     );
 };
 
-export default AssignmentModal; 
+export default AssignmentModal;

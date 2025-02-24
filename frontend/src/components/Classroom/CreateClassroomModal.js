@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const CreateClassroomModal = ({ onClose, onSubmit, classroom = null, isEditing = false }) => {
+const CreateClassroomModal = ({ onClose, onSubmit, isEdit, initialData }) => {
     const [formData, setFormData] = useState({
         name: '',
         subject: '',
@@ -9,20 +9,21 @@ const CreateClassroomModal = ({ onClose, onSubmit, classroom = null, isEditing =
     });
 
     useEffect(() => {
-        if (classroom) {
+        if (initialData) {
             setFormData({
-                name: classroom.name || '',
-                subject: classroom.subject || '',
-                description: classroom.description || '',
-                studentEmails: classroom.studentEmails?.join(', ') || ''
+                name: initialData.name || '',
+                subject: initialData.subject || '',
+                description: initialData.description || '',
+                studentEmails: Array.isArray(initialData.studentEmails) 
+                    ? initialData.studentEmails.join(', ')
+                    : ''
             });
         }
-    }, [classroom]);
+    }, [initialData]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        // Split emails by comma and trim whitespace
         const studentEmails = formData.studentEmails
             .split(',')
             .map(email => email.trim())
@@ -35,44 +36,103 @@ const CreateClassroomModal = ({ onClose, onSubmit, classroom = null, isEditing =
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <h2 className="text-xl font-semibold mb-4">
-                    {isEditing ? 'Edit Classroom' : 'Create New Classroom'}
-                </h2>
+        <div className="modal-overlay" style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1050
+        }}>
+            <div className="modal-content" style={{
+                backgroundColor: 'white',
+                borderRadius: '12px',
+                padding: '2rem',
+                width: '90%',
+                maxWidth: '500px',
+                position: 'relative',
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                animation: 'modalFadeIn 0.3s ease'
+            }}>
+                <div className="d-flex justify-content-between align-items-center mb-4">
+                    <h2 className="h5 mb-0">{isEdit ? 'Edit Classroom' : 'Create Classroom'}</h2>
+                    <button onClick={onClose} className="btn-close"></button>
+                </div>
                 
                 <form onSubmit={handleSubmit}>
                     <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Name</label>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{
+                                display: 'block',
+                                marginBottom: '0.5rem',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                color: '#374151'
+                            }}>Classroom Name</label>
                             <input
                                 type="text"
                                 value={formData.name}
                                 onChange={(e) => setFormData({...formData, name: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.375rem',
+                                    border: '1px solid #d1d5db',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s'
+                                }}
                                 required
                             />
                         </div>
                         
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Subject</label>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{
+                                display: 'block',
+                                marginBottom: '0.5rem',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                color: '#374151'
+                            }}>Subject</label>
                             <input
                                 type="text"
                                 value={formData.subject}
                                 onChange={(e) => setFormData({...formData, subject: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.375rem',
+                                    border: '1px solid #d1d5db',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s'
+                                }}
                                 required
                             />
                         </div>
                         
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Description</label>
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{
+                                display: 'block',
+                                marginBottom: '0.5rem',
+                                fontSize: '0.875rem',
+                                fontWeight: '500',
+                                color: '#374151'
+                            }}>Description</label>
                             <textarea
                                 value={formData.description}
                                 onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                rows="3"
-                                required
+                                rows="4"
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    borderRadius: '0.375rem',
+                                    border: '1px solid #d1d5db',
+                                    outline: 'none',
+                                    transition: 'border-color 0.2s'
+                                }}
                             />
                         </div>
 
@@ -93,19 +153,19 @@ const CreateClassroomModal = ({ onClose, onSubmit, classroom = null, isEditing =
                         </div>
                     </div>
 
-                    <div className="mt-6 flex justify-end gap-4">
+                    <div className="d-flex justify-content-end gap-2 mt-4">
                         <button
                             type="button"
+                            className="btn btn-light"
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-700 hover:text-gray-900"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                            className="btn btn-primary"
                         >
-                            {isEditing ? 'Update Classroom' : 'Create Classroom'}
+                            {isEdit ? 'Update Classroom' : 'Create Classroom'}
                         </button>
                     </div>
                 </form>
@@ -114,4 +174,4 @@ const CreateClassroomModal = ({ onClose, onSubmit, classroom = null, isEditing =
     );
 };
 
-export default CreateClassroomModal; 
+export default CreateClassroomModal;
