@@ -190,15 +190,39 @@ const FacultyDashboard = () => {
     useEffect(() => {
         if (updateTrigger > 0) {
             const timer = setTimeout(async () => {
-                await fetchClassrooms();
                 if (selectedClassroom) {
+                    // Fetch updated assignments
                     await fetchAssignments(selectedClassroom._id);
+                } else {
+                    // Fetch updated classrooms list
+                    await fetchClassrooms();
                 }
-            }, 2000);
+            }, 1000); // Reduced timeout for faster refresh
+
             return () => clearTimeout(timer);
         }
+    }, [updateTrigger, selectedClassroom]);
+
+    // Add this useEffect to handle assignment updates
+    useEffect(() => {
+        const refreshAssignments = async () => {
+            if (selectedClassroom && showSubmissions) {
+                const updatedAssignments = await fetchAssignments(selectedClassroom._id);
+                if (selectedAssignment) {
+                    const updatedAssignment = updatedAssignments?.find(
+                        a => a._id === selectedAssignment._id
+                    );
+                    if (updatedAssignment) {
+                        setSelectedAssignment(updatedAssignment);
+                    }
+                }
+            }
+        };
+
+        refreshAssignments();
     }, [updateTrigger]);
 
+    // Modify handleCreateClassroom
     const handleCreateClassroom = async (formData) => {
         try {
             const sessionId = sessionStorage.getItem('sessionId');
@@ -215,15 +239,27 @@ const FacultyDashboard = () => {
             );
 
             if (response.data.success) {
+                // Show success notification
                 setSuccess('Classroom created successfully');
                 setShowCreateModal(false);
+                
+                // Update local state immediately
+                setClassrooms(prevClassrooms => [...prevClassrooms, response.data.classroom]);
+                
+                // Trigger background refresh
                 triggerUpdate();
+                
+                // Fetch fresh data after a short delay
+                setTimeout(async () => {
+                    await fetchClassrooms();
+                }, 1000);
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to create classroom');
         }
     };
 
+    // Modify handleUpdateClassroom
     const handleUpdateClassroom = async (updatedData) => {
         try {
             const sessionId = sessionStorage.getItem('sessionId');
@@ -231,12 +267,7 @@ const FacultyDashboard = () => {
 
             const response = await axios.put(
                 `http://localhost:9000/api/faculty/classrooms/${selectedClassroom._id}`,
-                {
-                    name: updatedData.name,
-                    subject: updatedData.subject,
-                    description: updatedData.description,
-                    studentEmails: updatedData.studentEmails
-                },
+                updatedData,
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -246,15 +277,41 @@ const FacultyDashboard = () => {
             );
 
             if (response.data.success) {
+                // Show success notification
                 setSuccess('Classroom updated successfully');
                 setShowEditModal(false);
+                
+                // Update local state immediately
+                setClassrooms(prevClassrooms => 
+                    prevClassrooms.map(classroom => 
+                        classroom._id === selectedClassroom._id 
+                            ? { ...classroom, ...updatedData }
+                            : classroom
+                    )
+                );
+                
+                // Update selected classroom if viewing it
+                if (selectedClassroom) {
+                    setSelectedClassroom(prev => ({
+                        ...prev,
+                        ...updatedData
+                    }));
+                }
+                
+                // Trigger background refresh
                 triggerUpdate();
+                
+                // Fetch fresh data after a short delay
+                setTimeout(async () => {
+                    await fetchClassrooms();
+                }, 1000);
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to update classroom');
         }
     };
 
+    // Modify handleDeleteClassroom
     const handleDeleteClassroom = async (classroomId) => {
         if (window.confirm('Are you sure you want to delete this classroom?')) {
             try {
@@ -272,8 +329,26 @@ const FacultyDashboard = () => {
                 );
 
                 if (response.data.success) {
+                    // Show success notification
                     setSuccess('Classroom deleted successfully');
+                    
+                    // Update local state immediately
+                    setClassrooms(prevClassrooms => 
+                        prevClassrooms.filter(classroom => classroom._id !== classroomId)
+                    );
+                    
+                    // If viewing the deleted classroom, go back to list
+                    if (selectedClassroom?._id === classroomId) {
+                        setSelectedClassroom(null);
+                    }
+                    
+                    // Trigger background refresh
                     triggerUpdate();
+                    
+                    // Fetch fresh data after a short delay
+                    setTimeout(async () => {
+                        await fetchClassrooms();
+                    }, 1000);
                 }
             } catch (error) {
                 setError(error.response?.data?.message || 'Failed to delete classroom');
@@ -448,6 +523,7 @@ const FacultyDashboard = () => {
         }
     };
 
+    // Modify the handleGradeSubmission function
     const handleGradeSubmission = async (gradeData) => {
         try {
             const sessionId = sessionStorage.getItem('sessionId');
@@ -462,20 +538,65 @@ const FacultyDashboard = () => {
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
-                        'X-Session-ID': sessionId,
-                        'Content-Type': 'application/json'
+                        'X-Session-ID': sessionId
                     }
                 }
             );
 
             if (response.data.success) {
+                // Show success notification
                 setSuccess('Submission graded successfully');
+                
+                // Close the modal
                 setShowGradeModal(false);
                 setSelectedSubmission(null);
+                
+                // Immediately update the UI
+                setAssignments(prevAssignments => 
+                    prevAssignments.map(assignment => {
+                        if (assignment._id === selectedAssignment._id) {
+                            const updatedSubmissions = assignment.submissions.map(sub => {
+                                if (sub._id === selectedSubmission._id) {
+                                    return {
+                                        ...sub,
+                                        grade: parseInt(gradeData.grade),
+                                        feedback: gradeData.feedback,
+                                        status: 'graded' // Update the status
+                                    };
+                                }
+                                return sub;
+                            });
+                            return { ...assignment, submissions: updatedSubmissions };
+                        }
+                        return assignment;
+                    })
+                );
+
+                // Update selected assignment if in submission view
+                if (showSubmissions && selectedAssignment) {
+                    setSelectedAssignment(prev => ({
+                        ...prev,
+                        submissions: prev.submissions.map(sub => {
+                            if (sub._id === selectedSubmission._id) {
+                                return {
+                                    ...sub,
+                                    grade: parseInt(gradeData.grade),
+                                    feedback: gradeData.feedback,
+                                    status: 'graded'
+                                };
+                            }
+                            return sub;
+                        })
+                    }));
+                }
+
+                // Trigger background refresh
                 triggerUpdate();
-                setTimeout(() => {
-                    window.location.reload();
-                }, 2000);
+
+                // Fetch fresh data after a short delay
+                setTimeout(async () => {
+                    await fetchAssignments(selectedClassroom._id);
+                }, 1000);
             }
         } catch (error) {
             console.error('Error grading submission:', error);
@@ -774,7 +895,13 @@ const FacultyDashboard = () => {
                                         )}
                                         <button 
                                             className="btn btn-light d-flex align-items-center gap-2"
-                                            onClick={() => setSelectedClassroom(null)}
+                                            onClick={() => {
+                                                setSelectedClassroom(null);
+                                                setShowSubmissions(false);
+                                                setSelectedAssignment(null);
+                                                setAssignments([]);
+                                                setActiveView('assignments');
+                                            }}
                                         >
                                             <i className="bi bi-arrow-left"></i>
                                             Back
