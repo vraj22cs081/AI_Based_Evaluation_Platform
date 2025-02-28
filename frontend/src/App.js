@@ -14,6 +14,7 @@ import StudentDashboard from "./components/Dashboard/StudentDashboard";
 // import FacultyAssignmentList from "./components/Assignment/FacultyAssignmentList";
 // import ClassroomList from "./components/Classroom/ClassroomList";
 // import CreateClassroom from "./components/Classroom/CreateClassroom";
+import { UpdateProvider } from './context/UpdateContext';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
     const { isAuthenticated, userRole, loading } = useAuth();
@@ -46,59 +47,61 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 function App() {
     return (
         <ErrorBoundary>
-            <AuthProvider>
-                <Router>
-                    <Routes>
-                    <Route path="/" element={<Navigate to="/login" replace />} />
-                    <Route path="/signup" element={<SignUp />} />
-                    <Route path="/login" element={<Login />} />
-                    <Route
-                        path="/admin-dashboard"
-                        element={
-                            <ProtectedRoute allowedRoles={["Admin"]}>
-                                <AdminDashboard />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/faculty-dashboard"
-                        element={
-                            <ProtectedRoute allowedRoles={["Faculty"]}>
-                                <FacultyDashboard />
-                            </ProtectedRoute>
-                        }
-                    />
-                    <Route
-                        path="/student-dashboard"
-                        element={
+            <UpdateProvider>
+                <AuthProvider>
+                    <Router>
+                        <Routes>
+                        <Route path="/" element={<Navigate to="/login" replace />} />
+                        <Route path="/signup" element={<SignUp />} />
+                        <Route path="/login" element={<Login />} />
+                        <Route
+                            path="/admin-dashboard"
+                            element={
+                                <ProtectedRoute allowedRoles={["Admin"]}>
+                                    <AdminDashboard />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/faculty-dashboard"
+                            element={
+                                <ProtectedRoute allowedRoles={["Faculty"]}>
+                                    <FacultyDashboard />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/student-dashboard"
+                            element={
+                                <ProtectedRoute allowedRoles={["Student"]}>
+                                    <StudentDashboard />
+                                </ProtectedRoute>
+                            }
+                        />
+                        {/* <Route path="/classroom/:id/student-assignments" element={
                             <ProtectedRoute allowedRoles={["Student"]}>
-                                <StudentDashboard />
+                                <StudentAssignmentList />
                             </ProtectedRoute>
-                        }
-                    />
-                    {/* <Route path="/classroom/:id/student-assignments" element={
-                        <ProtectedRoute allowedRoles={["Student"]}>
-                            <StudentAssignmentList />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/classroom/:id/faculty-assignments" element={
-                        <ProtectedRoute allowedRoles={["Faculty"]}>
-                            <FacultyAssignmentList />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/classrooms" element={
-                        <ProtectedRoute allowedRoles={["Faculty"]}>
-                            <ClassroomList />
-                        </ProtectedRoute>
-                    } />
-                    <Route path="/create-classroom" element={
-                        <ProtectedRoute allowedRoles={["Faculty"]}>
-                            <CreateClassroom />
-                        </ProtectedRoute>
-                    } /> */}
-                </Routes>
-            </Router>
-        </AuthProvider>
+                        } />
+                        <Route path="/classroom/:id/faculty-assignments" element={
+                            <ProtectedRoute allowedRoles={["Faculty"]}>
+                                <FacultyAssignmentList />
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/classrooms" element={
+                            <ProtectedRoute allowedRoles={["Faculty"]}>
+                                <ClassroomList />
+                            </ProtectedRoute>
+                        } />
+                        <Route path="/create-classroom" element={
+                            <ProtectedRoute allowedRoles={["Faculty"]}>
+                                <CreateClassroom />
+                            </ProtectedRoute>
+                        } /> */}
+                    </Routes>
+                </Router>
+            </AuthProvider>
+        </UpdateProvider>
         </ErrorBoundary>
     );
 }

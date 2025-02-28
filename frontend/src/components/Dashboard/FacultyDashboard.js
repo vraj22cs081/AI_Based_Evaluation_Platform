@@ -5,11 +5,11 @@ import axios from 'axios';
 import LoadingSpinner from '../LoadingSpinner';
 import Notification from '../Notification';
 import AssignmentModal from '../Assignment/AssignmentModal';
-import AssignmentList from '../Assignment/AssignmentList';
 import GradeSubmissionModal from '../Assignment/GradeSubmissionModal';
 import CreateClassroomModal from '../Classroom/CreateClassroomModal';
 import Header from '../header/Header';
 import './Dashboard.css';
+import { useUpdate } from '../../context/UpdateContext';
 
 const FacultyDashboard = () => {
     const [classrooms, setClassrooms] = useState([]);
@@ -36,6 +36,7 @@ const FacultyDashboard = () => {
     const [showEditAssignmentModal, setShowEditAssignmentModal] = useState(false);
     const [editingAssignment, setEditingAssignment] = useState(null);
     const [showSubmissions, setShowSubmissions] = useState(false);
+    const { updateTrigger, triggerUpdate } = useUpdate();
 
     const getBackgroundColor = (index) => {
         const colors = [
@@ -186,11 +187,22 @@ const FacultyDashboard = () => {
         checkAuth();
     }, [userRole, navigate, fetchClassrooms]);
 
+    useEffect(() => {
+        if (updateTrigger > 0) {
+            const timer = setTimeout(async () => {
+                await fetchClassrooms();
+                if (selectedClassroom) {
+                    await fetchAssignments(selectedClassroom._id);
+                }
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [updateTrigger]);
+
     const handleCreateClassroom = async (formData) => {
         try {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
-
             const response = await axios.post(
                 'http://localhost:9000/api/faculty/classrooms',
                 formData,
@@ -204,8 +216,8 @@ const FacultyDashboard = () => {
 
             if (response.data.success) {
                 setSuccess('Classroom created successfully');
-                await fetchClassrooms();
                 setShowCreateModal(false);
+                triggerUpdate();
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to create classroom');
@@ -236,7 +248,7 @@ const FacultyDashboard = () => {
             if (response.data.success) {
                 setSuccess('Classroom updated successfully');
                 setShowEditModal(false);
-                await fetchClassrooms();
+                triggerUpdate();
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to update classroom');
@@ -261,7 +273,7 @@ const FacultyDashboard = () => {
 
                 if (response.data.success) {
                     setSuccess('Classroom deleted successfully');
-                    await fetchClassrooms();
+                    triggerUpdate();
                 }
             } catch (error) {
                 setError(error.response?.data?.message || 'Failed to delete classroom');
@@ -270,26 +282,52 @@ const FacultyDashboard = () => {
     };
 
     const handleRemoveStudent = async (classroomId, studentId) => {
-        try {
-            const sessionId = sessionStorage.getItem('sessionId');
-            const token = sessionStorage.getItem(`token_${sessionId}`);
+        if (window.confirm('Are you sure you want to remove this student?')) {
+            try {
+                const sessionId = sessionStorage.getItem('sessionId');
+                const token = sessionStorage.getItem(`token_${sessionId}`);
 
-            const response = await axios.delete(
-                `http://localhost:9000/api/faculty/classrooms/${classroomId}/students/${studentId}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${token}`,
-                        'X-Session-ID': sessionId
+                const response = await axios.delete(
+                    `http://localhost:9000/api/faculty/classrooms/${classroomId}/students/${studentId}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'X-Session-ID': sessionId
+                        }
                     }
-                }
-            );
+                );
 
-            if (response.data.success) {
-                setSuccess('Student removed successfully');
-                await fetchClassrooms();
+                if (response.data.success) {
+                    setSuccess('Student removed successfully');
+                    // Update the local state immediately
+                    setSelectedClassroom(prevClassroom => ({
+                        ...prevClassroom,
+                        students: prevClassroom.students.filter(student => student._id !== studentId)
+                    }));
+                    // Trigger global update
+                    triggerUpdate();
+                    // Force refresh classroom data
+                    setTimeout(async () => {
+                        await fetchClassrooms();
+                        if (selectedClassroom) {
+                            const updatedClassroomResponse = await axios.get(
+                                `http://localhost:9000/api/faculty/classrooms/${classroomId}`,
+                                {
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'X-Session-ID': sessionId
+                                    }
+                                }
+                            );
+                            if (updatedClassroomResponse.data.success) {
+                                setSelectedClassroom(updatedClassroomResponse.data.classroom);
+                            }
+                        }
+                    }, 1000);
+                }
+            } catch (error) {
+                setError(error.response?.data?.message || 'Failed to remove student');
             }
-        } catch (error) {
-            setError(error.response?.data?.message || 'Failed to remove student');
         }
     };
 
@@ -373,6 +411,7 @@ const FacultyDashboard = () => {
                 setSuccess('Assignment created successfully');
                 setShowAssignmentModal(false);
                 await fetchAssignments(selectedClassroom._id);
+                triggerUpdate();
             }
         } catch (error) {
             console.error('Assignment creation error:', error);
@@ -401,6 +440,7 @@ const FacultyDashboard = () => {
                 if (response.data.success) {
                     setSuccess('Assignment deleted successfully');
                     await fetchAssignments(selectedClassroom._id);
+                    triggerUpdate();
                 }
             } catch (error) {
                 setError(error.response?.data?.message || 'Failed to delete assignment');
@@ -432,22 +472,10 @@ const FacultyDashboard = () => {
                 setSuccess('Submission graded successfully');
                 setShowGradeModal(false);
                 setSelectedSubmission(null);
-
-                // Refresh the assignment data to update the UI
-                const updatedAssignment = await axios.get(
-                    `http://localhost:9000/api/faculty/assignments/${selectedAssignment._id}`,
-                    {
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'X-Session-ID': sessionId
-                        }
-                    }
-                );
-
-                if (updatedAssignment.data.success) {
-                    setSelectedAssignment(updatedAssignment.data.assignment);
-                    await fetchAssignments(selectedClassroom._id);
-                }
+                triggerUpdate();
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
             }
         } catch (error) {
             console.error('Error grading submission:', error);
@@ -506,6 +534,7 @@ const FacultyDashboard = () => {
                 setShowEditAssignmentModal(false);
                 setEditingAssignment(null);
                 await fetchAssignments(selectedClassroom._id);
+                triggerUpdate();
             }
         } catch (error) {
             console.error('Error updating assignment:', error);
@@ -526,28 +555,34 @@ const FacultyDashboard = () => {
         setShowEditModal(true);
     };
 
-    const renderStudentList = () => (
-        <div className="mt-4">
-            <h3 className="text-lg font-semibold mb-2">Enrolled Students</h3>
-            {selectedClassroom?.students?.length > 0 ? (
-                <ul className="space-y-2">
-                    {selectedClassroom.students.map(student => (
-                        <li key={student._id} className="flex justify-between items-center">
-                            <span>{student.name} ({student.email})</span>
-                            <button
-                                onClick={() => handleRemoveStudent(selectedClassroom._id, student._id)}
-                                className="text-red-600 hover:text-red-800 text-sm"
-                            >
-                                Remove
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-            ) : (
-                <p className="text-gray-500">No students enrolled yet</p>
-            )}
-        </div>
-    );
+    const handleClassroomClick = (classroom) => {
+        setSelectedClassroom(classroom);
+        setActiveView('assignments');
+        fetchAssignments(classroom._id);
+    };
+
+    // const renderStudentList = () => (
+    //     <div className="mt-4">
+    //         <h3 className="text-lg font-semibold mb-2">Enrolled Students</h3>
+    //         {selectedClassroom?.students?.length > 0 ? (
+    //             <ul className="space-y-2">
+    //                 {selectedClassroom.students.map(student => (
+    //                     <li key={student._id} className="flex justify-between items-center">
+    //                         <span>{student.name} ({student.email})</span>
+    //                         <button
+    //                             onClick={() => handleRemoveStudent(selectedClassroom._id, student._id)}
+    //                             className="text-red-600 hover:text-red-800 text-sm"
+    //                         >
+    //                             Remove
+    //                         </button>
+    //                     </li>
+    //                 ))}
+    //             </ul>
+    //         ) : (
+    //             <p className="text-gray-500">No students enrolled yet</p>
+    //         )}
+    //     </div>
+    // );
 
     if (loading) {
         return <LoadingSpinner />;
@@ -556,7 +591,10 @@ const FacultyDashboard = () => {
     return (
         <div className="relative">
             <div className="min-vh-100 bg-light">
-                <Header />
+                <Header 
+                    userName={userName}
+                    onLogout={handleLogout}
+                />
                 
                 <div className="container-fluid pt-4" style={{ 
                     marginTop: '80px', 
@@ -596,11 +634,7 @@ const FacultyDashboard = () => {
                                 <div className="col" key={classroom._id}>
                                     <div 
                                         className="card h-100 border-0 shadow-sm"
-                                        style={{ cursor: 'pointer' }}
-                                        onClick={() => {
-                                            setSelectedClassroom(classroom);
-                                            fetchAssignments(classroom._id);
-                                        }}
+                                        onClick={() => handleClassroomClick(classroom)}
                                     >
                                         {/* Colored Header */}
                                         <div 
@@ -655,7 +689,7 @@ const FacultyDashboard = () => {
                                                     <small className="text-muted">Room Code:</small>
                                                     <span className="ms-2 fw-semibold">{classroom.roomCode}</span>
                                                 </div>
-                                                <div>
+                                                <div onClick={(e) => e.stopPropagation()}>
                                                     <button 
                                                         className="btn btn-link text-primary p-0 me-3"
                                                         onClick={(e) => {
@@ -669,6 +703,7 @@ const FacultyDashboard = () => {
                                                     <button 
                                                         className="btn btn-link text-danger p-0"
                                                         onClick={(e) => {
+                                                            e.preventDefault();
                                                             e.stopPropagation();
                                                             handleDeleteClassroom(classroom._id);
                                                         }}

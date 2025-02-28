@@ -9,6 +9,7 @@ import StudentAssignmentView from '../Assignment/StudentAssignmentView';
 import AssignmentSubmissionModal from '../Assignment/AssignmentSubmissionModal';
 import JoinClassroomModal from '../Classroom/JoinClassroomModal';
 import Header from '../header/Header';
+import { useUpdate } from '../../context/UpdateContext';
 
 
 const StudentDashboard = () => {
@@ -25,6 +26,7 @@ const StudentDashboard = () => {
     const { userName, logout, userRole } = useAuth();
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
+    const { updateTrigger, triggerUpdate } = useUpdate();
 
     // Add state for assignment counts
     const [assignmentCounts, setAssignmentCounts] = useState({});
@@ -48,13 +50,30 @@ const StudentDashboard = () => {
         
         if (window.confirm('Are you sure you want to exit this classroom?')) {
             try {
-                await axios.post(`/api/classrooms/${classroomId}/exit`);
-                setEnrolledClassrooms(prev => 
-                    prev.filter(classroom => classroom._id !== classroomId)
+                const sessionId = sessionStorage.getItem('sessionId');
+                const token = sessionStorage.getItem(`token_${sessionId}`);
+
+                const response = await axios.post(
+                    `http://localhost:9000/api/student/classrooms/${classroomId}/exit`,
+                    {},
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'X-Session-ID': sessionId
+                        }
+                    }
                 );
-                setSuccess('Successfully exited the classroom');
+
+                if (response.data.success) {
+                    setEnrolledClassrooms(prev => 
+                        prev.filter(classroom => classroom._id !== classroomId)
+                    );
+                    setSuccess('Successfully exited the classroom');
+                    setSelectedClassroom(null);
+                    triggerUpdate();
+                }
             } catch (error) {
-                setError('Failed to exit classroom');
+                setError(error.response?.data?.message || 'Failed to exit classroom');
             }
         }
     };
@@ -101,6 +120,18 @@ const StudentDashboard = () => {
         
         checkAuth();
     }, [userRole, navigate, fetchEnrolledClassrooms]);
+
+    useEffect(() => {
+        if (updateTrigger > 0) {
+            const timer = setTimeout(async () => {
+                await fetchEnrolledClassrooms();
+                if (selectedClassroom) {
+                    await fetchAssignments(selectedClassroom._id);
+                }
+            }, 2000);
+            return () => clearTimeout(timer);
+        }
+    }, [updateTrigger, selectedClassroom, fetchEnrolledClassrooms]);
 
     const fetchAssignments = async (classroomId) => {
         try {
@@ -149,14 +180,14 @@ const StudentDashboard = () => {
                 setSuccess('Assignment submitted successfully');
                 setShowSubmissionModal(false);
                 setSelectedAssignment(null);
-                // Refresh assignments
-                if (selectedClassroom) {
-                    await fetchAssignments(selectedClassroom._id);
-                }
+                setSearchParams({});
+                triggerUpdate();
+                // Reset selected classroom and redirect
+                setSelectedClassroom(null);
+                navigate('/student/dashboard');
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to submit assignment');
-            throw error; // Propagate error to modal
         }
     };
 
@@ -189,6 +220,7 @@ const StudentDashboard = () => {
                 setSuccess('Successfully joined classroom');
                 await fetchEnrolledClassrooms();
                 setShowJoinModal(false);
+                triggerUpdate();
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to join classroom');
@@ -507,15 +539,21 @@ const StudentDashboard = () => {
                                                                     setShowSubmissionView(true);
                                                                 }}
                                                                 className={`btn w-100 ${
-                                                                    isAssignmentOverdue(assignment.dueDate)
-                                                                        ? 'btn-outline-danger'
-                                                                        : 'btn-primary'
+                                                                    assignment.submission 
+                                                                        ? 'btn-success disabled' 
+                                                                        : isAssignmentOverdue(assignment.dueDate)
+                                                                            ? 'btn-outline-danger'
+                                                                            : 'btn-primary'
                                                                 }`}
+                                                                disabled={assignment.submission !== null}
                                                             >
-                                                                <i className="bi bi-upload me-2"></i>
-                                                                {isAssignmentOverdue(assignment.dueDate)
-                                                                    ? 'Submit Late'
-                                                                    : 'Submit Assignment'}
+                                                                <i className={`bi ${assignment.submission ? 'bi-check-circle' : 'bi-upload'} me-2`}></i>
+                                                                {assignment.submission 
+                                                                    ? 'Submitted' 
+                                                                    : isAssignmentOverdue(assignment.dueDate)
+                                                                        ? 'Submit Late'
+                                                                        : 'Submit Assignment'
+                                                                }
                                                             </button>
                                                         )}
                                                     </div>
@@ -547,8 +585,13 @@ const StudentDashboard = () => {
                     <div className="modal-content">
                         <AssignmentSubmissionModal
                             assignment={selectedAssignment}
-                            onClose={handleCloseModal}
-                            onSubmit={handleSubmitAssignment}
+                            onClose={() => {
+                                setShowSubmissionModal(false);
+                                setSelectedAssignment(null);
+                                setSearchParams({});
+                                setSelectedClassroom(null);
+                            }}
+                            triggerUpdate={triggerUpdate}
                         />
                     </div>
                 </div>

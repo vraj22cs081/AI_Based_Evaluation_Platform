@@ -277,4 +277,39 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), asyn
     }
 });
 
+// Add exit classroom route
+router.post('/classrooms/:classroomId/exit', authMiddleware('Student'), async (req, res) => {
+    try {
+        const { classroomId } = req.params;
+        const studentId = req.user._id;
+
+        // Find the classroom and remove the student
+        const classroom = await Classroom.findByIdAndUpdate(
+            classroomId,
+            {
+                $pull: { students: studentId }
+            },
+            { new: true }
+        );
+
+        if (!classroom) {
+            return res.status(404).json({
+                success: false,
+                message: 'Classroom not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Successfully exited classroom'
+        });
+    } catch (error) {
+        console.error('Error exiting classroom:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to exit classroom'
+        });
+    }
+});
+
 module.exports = router; 

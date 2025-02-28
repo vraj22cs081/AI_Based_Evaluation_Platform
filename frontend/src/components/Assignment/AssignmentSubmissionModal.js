@@ -54,7 +54,10 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                 
                 if (submitData.success) {
                     setMessage({ type: 'success', text: 'Assignment submitted successfully!' });
-                    setTimeout(onClose, 2000);
+                    setTimeout(() => {
+                        onClose();
+                        window.location.reload(); // Force page refresh
+                    }, 2000);
                 }
             }
         } catch (err) {
@@ -63,6 +66,9 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
             setUploading(false);
         }
     };
+
+    // Check if assignment is already submitted
+    const isSubmitted = assignment.submission !== null;
 
     return (
         <div className="submission-modal">
@@ -89,42 +95,55 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                 </div>
             </div>
 
-            {/* File Upload */}
-            <div className="justify-content-center file-upload-container">
-                <input
-                    type="file"
-                    accept=".pdf"
-                    onChange={handleFileChange}
-                    className="hidden"
-                    id="file-upload"
-                />
-                <label htmlFor="file-upload" className="file-upload-area">
-                    <div className="file-upload-text">
-                        Drop your PDF file here, or click to select
+            {isSubmitted ? (
+                <div className="alert alert-info">
+                    This assignment has already been submitted.
+                </div>
+            ) : (
+                <form onSubmit={handleSubmit}>
+                    {/* File Upload */}
+                    <div className="justify-content-center file-upload-container">
+                        <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={handleFileChange}
+                            className="hidden"
+                            id="file-upload"
+                            disabled={isSubmitted}
+                        />
+                        <label htmlFor="file-upload" className="file-upload-area">
+                            <div className="file-upload-text">
+                                Drop your PDF file here, or click to select
+                            </div>
+                            <div className="file-upload-hint">PDF only, max 5MB</div>
+                            {file && <div className="selected-file">{file.name}</div>}
+                        </label>
                     </div>
-                    <div className="file-upload-hint">PDF only, max 5MB</div>
-                    {file && <div className="selected-file">{file.name}</div>}
-                </label>
-            </div>
 
-            {/* Status Messages */}
-            {message.text && (
-                <p className={`mt-2 text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>{message.text}</p>
+                    {/* Status Messages */}
+                    {message.text && (
+                        <p className={`mt-2 text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>{message.text}</p>
+                    )}
+
+                    {/* Buttons */}
+                    <div className="button-container">
+                        <button 
+                            type="button" 
+                            className="cancel-button" 
+                            onClick={onClose}
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            className="submit-button"
+                            disabled={!file || uploading || isSubmitted}
+                        >
+                            {uploading ? 'Submitting...' : 'Submit'}
+                        </button>
+                    </div>
+                </form>
             )}
-
-            {/* Buttons */}
-            <div className="button-container">
-                <button onClick={onClose} className="cancel-button">
-                    Cancel
-                </button>
-                <button
-                    onClick={handleSubmit}
-                    disabled={uploading || !file}
-                    className="submit-button"
-                >
-                    {uploading ? 'Submitting...' : 'Submit Assignment'}
-                </button>
-            </div>
         </div>
     );
 };
