@@ -540,18 +540,28 @@ const StudentDashboard = () => {
                                                                 }}
                                                                 className={`btn w-100 ${
                                                                     assignment.submission 
-                                                                        ? 'btn-success disabled' 
+                                                                        ? isAssignmentOverdue(assignment.dueDate)
+                                                                            ? 'btn-secondary disabled'
+                                                                            : 'btn-warning' 
                                                                         : isAssignmentOverdue(assignment.dueDate)
                                                                             ? 'btn-outline-danger'
                                                                             : 'btn-primary'
                                                                 }`}
-                                                                disabled={assignment.submission !== null}
+                                                                disabled={isAssignmentOverdue(assignment.dueDate) && assignment.submission}
                                                             >
-                                                                <i className={`bi ${assignment.submission ? 'bi-check-circle' : 'bi-upload'} me-2`}></i>
+                                                                <i className={`bi ${
+                                                                    assignment.submission 
+                                                                        ? isAssignmentOverdue(assignment.dueDate)
+                                                                            ? 'bi-check-circle'
+                                                                            : 'bi-arrow-repeat' 
+                                                                        : 'bi-upload'
+                                                                } me-2`}></i>
                                                                 {assignment.submission 
-                                                                    ? 'Submitted' 
+                                                                    ? isAssignmentOverdue(assignment.dueDate)
+                                                                        ? 'Submitted'
+                                                                        : 'Resubmit' 
                                                                     : isAssignmentOverdue(assignment.dueDate)
-                                                                        ? 'Submit Late'
+                                                                        ? 'Deadline Passed'
                                                                         : 'Submit Assignment'
                                                                 }
                                                             </button>
