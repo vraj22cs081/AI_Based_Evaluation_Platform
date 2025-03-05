@@ -37,6 +37,8 @@ const FacultyDashboard = () => {
     const [editingAssignment, setEditingAssignment] = useState(null);
     const [showSubmissions, setShowSubmissions] = useState(false);
     const { updateTrigger, triggerUpdate } = useUpdate();
+    const [autoGradingStatus, setAutoGradingStatus] = useState({});
+    const [gradeModalData, setGradeModalData] = useState(null);
 
     const getBackgroundColor = (index) => {
         const colors = [
@@ -682,28 +684,244 @@ const FacultyDashboard = () => {
         fetchAssignments(classroom._id);
     };
 
-    // const renderStudentList = () => (
-    //     <div className="mt-4">
-    //         <h3 className="text-lg font-semibold mb-2">Enrolled Students</h3>
-    //         {selectedClassroom?.students?.length > 0 ? (
-    //             <ul className="space-y-2">
-    //                 {selectedClassroom.students.map(student => (
-    //                     <li key={student._id} className="flex justify-between items-center">
-    //                         <span>{student.name} ({student.email})</span>
-    //                         <button
-    //                             onClick={() => handleRemoveStudent(selectedClassroom._id, student._id)}
-    //                             className="text-red-600 hover:text-red-800 text-sm"
-    //                         >
-    //                             Remove
-    //                         </button>
-    //                     </li>
-    //                 ))}
-    //             </ul>
-    //         ) : (
-    //             <p className="text-gray-500">No students enrolled yet</p>
-    //         )}
-    //     </div>
-    // );
+    // Add this function to handle auto-grade review
+    const handleReviewAutoGrade = async (assignmentId, submissionId, currentGrade) => {
+        try {
+            const sessionId = sessionStorage.getItem('sessionId');
+            const token = sessionStorage.getItem(`token_${sessionId}`);
+
+            // Update the grade if faculty wants to modify it
+            const response = await axios.put(
+                `http://localhost:9000/api/faculty/assignments/${assignmentId}/submissions/${submissionId}/grade`,
+                {
+                    grade: parseInt(currentGrade),
+                    feedback: gradeModalData?.feedback || 'Reviewed auto-graded submission',
+                    isReviewed: true
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-Session-ID': sessionId
+                    }
+                }
+            );
+
+            if (response.data.success) {
+                setSuccess('Grade reviewed successfully');
+                setShowGradeModal(false);
+                setGradeModalData(null);
+                triggerUpdate();
+            }
+        } catch (error) {
+            setError(error.response?.data?.message || 'Failed to review grade');
+        }
+    };
+
+    const handleAutoGrade = async (assignmentId, submissionId) => {
+        try {
+            const sessionId = sessionStorage.getItem('sessionId');
+            const token = sessionStorage.getItem(`token_${sessionId}`);
+
+            const response = await axios.post(
+                `http://localhost:9000/api/faculty/assignments/${assignmentId}/submissions/${submissionId}/autograde`,
+                {},
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-Session-ID': sessionId
+                    }
+                }
+            );
+
+            if (response.data.success) {
+                setSuccess('Assignment auto-graded successfully');
+                
+                // Update the assignments state with new grade
+                setAssignments(prevAssignments => 
+                    prevAssignments.map(assignment => {
+                        if (assignment._id === assignmentId) {
+                            const updatedSubmissions = assignment.submissions.map(sub => {
+                                if (sub._id === submissionId) {
+                                    return {
+                                        ...sub,
+                                        grade: response.data.grade,
+                                        feedback: response.data.feedback,
+                                        isAutoGraded: true
+                                    };
+                                }
+                                return sub;
+                            });
+                            return { ...assignment, submissions: updatedSubmissions };
+                        }
+                        return assignment;
+                    })
+                );
+                
+                triggerUpdate();
+            }
+        } catch (error) {
+            setError(error.response?.data?.message || 'Failed to auto-grade assignment');
+        }
+    };
+
+    // Update the submissions table rendering
+    const renderSubmissionsTable = () => {
+        return (
+            <div className="table-responsive mt-4">
+                <table className="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Submitted On</th>
+                            <th>Status</th>
+                            <th>Grade</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {selectedAssignment.submissions.map((submission) => (
+                            <tr key={submission._id}>
+                                <td>{submission.student.name}</td>
+                                <td>{new Date(submission.submittedAt).toLocaleString()}</td>
+                                <td>
+                                    <span className={`badge ${
+                                        submission.isAutoGraded 
+                                            ? 'bg-info' 
+                                            : submission.grade 
+                                                ? 'bg-success' 
+                                                : 'bg-warning'
+                                    }`}>
+                                        {submission.isAutoGraded 
+                                            ? 'Auto-graded' 
+                                            : submission.grade 
+                                                ? 'Manually Graded' 
+                                                : 'Pending'
+                                        }
+                                    </span>
+                                </td>
+                                <td>
+                                    {submission.grade !== undefined ? (
+                                        <div>
+                                            {submission.grade} / {selectedAssignment.maxMarks}
+                                            {submission.feedback && (
+                                                <small className="text-muted d-block">
+                                                    Feedback: {submission.feedback}
+                                                </small>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        '--'
+                                    )}
+                                </td>
+                                <td>
+                                    <div className="btn-group">
+                                        <button
+                                            className="btn btn-primary btn-sm"
+                                            onClick={() => {
+                                                setSelectedSubmission(submission);
+                                                setShowGradeModal(true);
+                                            }}
+                                        >
+                                            {submission.grade ? 'Update Grade' : 'Grade'}
+                                        </button>
+                                        {!submission.grade && (
+                                            <button
+                                                className="btn btn-info btn-sm ms-1"
+                                                onClick={() => handleAutoGrade(selectedAssignment._id, submission._id)}
+                                            >
+                                                Auto Grade
+                                            </button>
+                                        )}
+                                    </div>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        );
+    };
+
+    // Update the grade modal component
+    const renderGradeModal = () => {
+        if (!showGradeModal || !selectedSubmission) return null;
+
+        return (
+            <div className="modal-overlay">
+                <div className="modal-content">
+                    <div className="modal-header">
+                        <h5 className="modal-title">
+                            {selectedSubmission.isReviewed ? 'Update Grade' : 'Review Auto-graded Submission'}
+                        </h5>
+                        <button 
+                            type="button" 
+                            className="btn-close" 
+                            onClick={() => {
+                                setShowGradeModal(false);
+                                setGradeModalData(null);
+                            }}
+                        />
+                    </div>
+                    <div className="modal-body">
+                        <form onSubmit={(e) => {
+                            e.preventDefault();
+                            handleReviewAutoGrade(
+                                selectedAssignment._id,
+                                selectedSubmission._id,
+                                gradeModalData.grade
+                            );
+                        }}>
+                            <div className="mb-3">
+                                <label className="form-label">Grade (out of {selectedAssignment.maxMarks})</label>
+                                <input
+                                    type="number"
+                                    className="form-control"
+                                    value={gradeModalData?.grade || ''}
+                                    onChange={(e) => setGradeModalData(prev => ({
+                                        ...prev,
+                                        grade: e.target.value
+                                    }))}
+                                    min="0"
+                                    max={selectedAssignment.maxMarks}
+                                    required
+                                />
+                            </div>
+                            <div className="mb-3">
+                                <label className="form-label">Feedback</label>
+                                <textarea
+                                    className="form-control"
+                                    value={gradeModalData?.feedback || ''}
+                                    onChange={(e) => setGradeModalData(prev => ({
+                                        ...prev,
+                                        feedback: e.target.value
+                                    }))}
+                                    rows="3"
+                                />
+                            </div>
+                            <div className="modal-footer">
+                                <button 
+                                    type="button" 
+                                    className="btn btn-secondary" 
+                                    onClick={() => {
+                                        setShowGradeModal(false);
+                                        setGradeModalData(null);
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    className="btn btn-primary"
+                                >
+                                    {selectedSubmission.isReviewed ? 'Update' : 'Confirm Grade'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     if (loading) {
         return <LoadingSpinner />;
@@ -932,60 +1150,7 @@ const FacultyDashboard = () => {
                                                 </button>
                                             </div>
 
-                                            {selectedAssignment.submissions?.length > 0 ? (
-                                                <div className="table-responsive">
-                                                    <table className="table">
-                                                        <thead>
-                                                            <tr>
-                                                                <th>Student</th>
-                                                                <th>Submitted On</th>
-                                                                <th>Status</th>
-                                                                <th>Grade</th>
-                                                                <th>Actions</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {selectedAssignment.submissions.map((submission) => (
-                                                                <tr key={submission._id}>
-                                                                    <td>{submission.student.name}</td>
-                                                                    <td>{new Date(submission.submittedAt).toLocaleString()}</td>
-                                                                    <td>
-                                                                        <span className={`badge ${submission.grade ? 'bg-success' : 'bg-warning'}`}>
-                                                                            {submission.grade ? 'Graded' : 'Pending'}
-                                                                        </span>
-                                                                    </td>
-                                                                    <td>{submission.grade || '--'}/{selectedAssignment.maxMarks}</td>
-                                                                    <td>
-                                                                        <div className="d-flex gap-2">
-                                                                            <a
-                                                                                href={`http://localhost:9000${submission.submissionUrl}`}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                className="btn btn-sm btn-light"
-                                                                            >
-                                                                                View
-                                                                            </a>
-                                                                            <button
-                                                                                className="btn btn-sm btn-primary"
-                                                                                onClick={() => {
-                                                                                    setSelectedSubmission(submission);
-                                                                                    setShowGradeModal(true);
-                                                                                }}
-                                                                            >
-                                                                                {submission.grade ? 'Update Grade' : 'Grade'}
-                                                                            </button>
-                                                                        </div>
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center py-4">
-                                                    <p className="text-muted">No submissions yet</p>
-                                                </div>
-                                            )}
+                                            {renderSubmissionsTable()}
                                         </div>
                                     ) : (
                                         // Existing assignments grid view
@@ -1244,6 +1409,8 @@ const FacultyDashboard = () => {
                     </div>
                 </div>
             )}
+
+            {renderGradeModal()}
         </div>
     );
 };

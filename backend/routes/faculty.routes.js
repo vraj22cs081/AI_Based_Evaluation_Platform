@@ -9,6 +9,8 @@ const fs = require('fs');
 const nodemailer = require('nodemailer');
 const { sendInviteEmail, notifyNewAssignment, notifyGradePosted } = require('../utils/emailService');
 const multer = require('multer');
+const PDFParser = require('pdf2json');
+const axios = require('axios');
 
 // Get faculty's classrooms
 router.get('/classrooms', authMiddleware('Faculty'), async (req, res) => {
@@ -820,6 +822,181 @@ router.get('/student/assignments', authMiddleware('Student'), async (req, res) =
         res.status(500).json({
             success: false,
             message: 'Failed to fetch assignments'
+        });
+    }
+});
+
+// Auto-grade submission using Groq API
+router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', authMiddleware('Faculty'), async (req, res) => {
+    let submission = null;
+    try {
+        const { assignmentId, submissionId } = req.params;
+        const assignment = await Assignment.findById(assignmentId)
+            .populate('submissions.student', 'name')
+            .populate('classroom', 'name');
+
+        if (!assignment) {
+            return res.status(404).json({ success: false, message: 'Assignment not found' });
+        }
+
+        submission = assignment.submissions.id(submissionId);
+        if (!submission) {
+            return res.status(404).json({ success: false, message: 'Submission not found' });
+        }
+
+        // Fix file path handling
+        const submissionFileName = submission.submissionUrl ? submission.submissionUrl.split('/').pop() : null;
+
+        if (!submissionFileName) {
+            return res.status(404).json({
+                success: false,
+                message: 'No submission file found'
+            });
+        }
+
+        const submissionFilePath = path.join(__dirname, '..', 'uploads', 'submissions', submissionFileName);
+
+        console.log('File details:', {
+            submissionUrl: submission.submissionUrl,
+            fileName: submissionFileName,
+            fullPath: submissionFilePath
+        });
+
+        if (!fs.existsSync(submissionFilePath)) {
+            console.error('File not found:', {
+                path: submissionFilePath,
+                submissionUrl: submission.submissionUrl
+            });
+            return res.status(404).json({
+                success: false,
+                message: 'Submission file not found on server'
+            });
+        }
+
+        try {
+            const dataBuffer = fs.readFileSync(submissionFilePath);
+            // Read PDF content using pdf2json
+            const pdfParser = new PDFParser();
+            const pdfContent = await new Promise((resolve, reject) => {
+                pdfParser.on('pdfParser_dataReady', (pdfData) => {
+                    const text = pdfData.Pages.map(page => 
+                        page.Texts.map(text => decodeURIComponent(text.R[0].T)).join(' ')
+                    ).join('\n');
+                    resolve(text);
+                });
+                pdfParser.on('pdfParser_dataError', reject);
+                pdfParser.loadPDF(submissionFilePath);
+            });
+
+            console.log('PDF Content extracted successfully');
+
+            // Prepare prompt for Groq API
+            const fullPrompt = `
+                Assignment Details:
+                Title: ${assignment.title}
+                Description: ${assignment.description}
+                Maximum Marks: ${assignment.maxMarks}
+                
+                Student Submission:
+                ${pdfContent}
+                
+                You are a teacher grading this assignment. Grade it out of ${assignment.maxMarks} marks.
+                Your response must be in this exact JSON format without any additional text:
+                {"grade": <number between 0 and ${assignment.maxMarks}>, "feedback": "<brief feedback about the submission>"}
+            `;
+
+            console.log('Calling Groq API...');
+
+            // Call Groq API
+            const response = await axios.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                {
+                    model: "llama3-8b-8192",
+                    messages: [
+                        {
+                            role: "system",
+                            content: "You are a teacher grading assignments. You must respond only with valid JSON in the format: {\"grade\": number, \"feedback\": \"string\"}"
+                        },
+                        {
+                            role: "user",
+                            content: fullPrompt
+                        }
+                    ],
+                    max_tokens: 500,
+                    temperature: 0.7,
+                },
+                {
+                    headers: { 
+                        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
+
+            // Parse the AI response with error handling
+            try {
+                const responseContent = response.data.choices[0].message.content.trim();
+                console.log('API Response:', responseContent);
+                
+                let aiResponse;
+                try {
+                    aiResponse = JSON.parse(responseContent);
+                } catch (parseError) {
+                    // If JSON parse fails, try to extract JSON from the text
+                    const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) {
+                        aiResponse = JSON.parse(jsonMatch[0]);
+                    } else {
+                        throw new Error('Could not parse API response as JSON');
+                    }
+                }
+
+                // Validate the response format
+                if (!aiResponse.grade || !aiResponse.feedback) {
+                    throw new Error('Invalid response format from API');
+                }
+
+                // Ensure grade is within bounds
+                aiResponse.grade = Math.min(Math.max(0, aiResponse.grade), assignment.maxMarks);
+
+                // Update submission
+                submission.grade = aiResponse.grade;
+                submission.feedback = aiResponse.feedback;
+                submission.isAutoGraded = true;
+                await assignment.save();
+
+                res.json({
+                    success: true,
+                    message: 'Assignment auto-graded successfully',
+                    grade: aiResponse.grade,
+                    feedback: aiResponse.feedback
+                });
+            } catch (parseError) {
+                console.error('Error parsing API response:', parseError);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to parse auto-grading response'
+                });
+            }
+        } catch (error) {
+            console.error('File reading error:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error reading submission file'
+            });
+        }
+    } catch (error) {
+        console.error('Auto-grading error details:', {
+            error: error.message,
+            stack: error.stack,
+            submissionDetails: submission ? {
+                url: submission.submissionUrl,
+                id: submission._id
+            } : 'No submission found'
+        });
+        res.status(500).json({
+            success: false,
+            message: 'Failed to auto-grade assignment: ' + error.message
         });
     }
 });

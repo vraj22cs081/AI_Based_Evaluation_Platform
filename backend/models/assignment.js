@@ -19,6 +19,10 @@ const submissionSchema = new mongoose.Schema({
     },
     feedback: {
         type: String
+    },
+    isAutoGraded: {
+        type: Boolean,
+        default: false
     }
 });
 

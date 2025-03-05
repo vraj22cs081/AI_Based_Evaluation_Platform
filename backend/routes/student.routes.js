@@ -204,13 +204,19 @@ router.post('/upload', authMiddleware('Student'), upload.single('file'), async (
 });
 
 // Submit assignment route
-router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), async (req, res) => {
+router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), upload.single('file'), async (req, res) => {
     try {
         const { assignmentId } = req.params;
-        const { submissionFile } = req.body;
         const studentId = req.user._id;
 
-        // Get assignment with classroom and faculty details
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'No file uploaded'
+            });
+        }
+
         const assignment = await Assignment.findById(assignmentId)
             .populate('classroom', 'name')
             .populate('createdBy', 'email');
@@ -222,7 +228,7 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), asyn
             });
         }
 
-        // Check if submission is before due date
+        // Check submission deadline
         if (new Date() > new Date(assignment.dueDate)) {
             return res.status(400).json({
                 success: false,
@@ -230,8 +236,8 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), asyn
             });
         }
 
-        // Get student details
-        const student = await User.findById(studentId);
+        // Create submission URL
+        const submissionUrl = `/uploads/submissions/${req.file.filename}`;
 
         // Update or create submission
         const submissionIndex = assignment.submissions.findIndex(
@@ -239,30 +245,17 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), asyn
         );
 
         if (submissionIndex > -1) {
-            assignment.submissions[submissionIndex].submissionUrl = submissionFile;
+            assignment.submissions[submissionIndex].submissionUrl = submissionUrl;
             assignment.submissions[submissionIndex].submittedAt = new Date();
         } else {
             assignment.submissions.push({
                 student: studentId,
-                submissionUrl: submissionFile,
+                submissionUrl: submissionUrl,
                 submittedAt: new Date()
             });
         }
 
         await assignment.save();
-
-        // Send email notifications
-        try {
-            await sendSubmissionConfirmation(
-                student.email,
-                student.name,
-                assignment.createdBy.email,
-                assignment.title,
-                assignment.classroom.name
-            );
-        } catch (emailError) {
-            console.error('Error sending submission notifications:', emailError);
-        }
 
         res.json({
             success: true,
@@ -272,7 +265,7 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), asyn
         console.error('Submission error:', error);
         res.status(500).json({
             success: false,
-            message: error.message || 'Failed to submit assignment'
+            message: 'Failed to submit assignment'
         });
     }
 });

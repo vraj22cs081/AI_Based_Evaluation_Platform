@@ -30,35 +30,33 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
             setMessage({ type: 'error', text: 'Please select a file to upload.' });
             return;
         }
-        
+
         setUploading(true);
+        const formData = new FormData();
+        formData.append('file', file);
+
         try {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
-            
-            const formData = new FormData();
-            formData.append('file', file);
-            
-            const { data: uploadData } = await axios.post(
-                'http://localhost:9000/api/student/upload',
+
+            const response = await axios.post(
+                `http://localhost:9000/api/student/assignments/${assignment._id}/submit`,
                 formData,
-                { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'multipart/form-data' } }
-            );
-            
-            if (uploadData.success) {
-                const { data: submitData } = await axios.post(
-                    `http://localhost:9000/api/student/assignments/${assignment._id}/submit`,
-                    { submissionFile: uploadData.fileUrl },
-                    { headers: { 'Authorization': `Bearer ${token}` } }
-                );
-                
-                if (submitData.success) {
-                    setMessage({ type: 'success', text: 'Assignment submitted successfully!' });
-                    setTimeout(() => {
-                        onClose();
-                        window.location.reload(); // Force page refresh
-                    }, 2000);
+                {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                        'Authorization': `Bearer ${token}`,
+                        'X-Session-ID': sessionId
+                    }
                 }
+            );
+
+            if (response.data.success) {
+                setMessage({ type: 'success', text: 'Assignment submitted successfully!' });
+                setTimeout(() => {
+                    onClose();
+                    window.location.reload();
+                }, 2000);
             }
         } catch (err) {
             setMessage({ type: 'error', text: err.response?.data?.message || 'Submission failed.' });
@@ -72,16 +70,13 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
 
     return (
         <div className="submission-modal">
-            {/* Header */}
             <div className="submission-header">
                 <h2 className="submission-title">Submit Assignment</h2>
                 <button onClick={onClose} className="close-button">×</button>
             </div>
 
-            {/* Assignment Title */}
             <h3 className="assignment-title">{assignment.title}</h3>
 
-            {/* Assignment Details */}
             <div className="assignment-details">
                 <div className="detail-group">
                     <label className="detail-label">Due Date</label>
@@ -101,7 +96,6 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                 </div>
             ) : (
                 <form onSubmit={handleSubmit}>
-                    {/* File Upload */}
                     <div className="justify-content-center file-upload-container">
                         <input
                             type="file"
@@ -120,12 +114,12 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                         </label>
                     </div>
 
-                    {/* Status Messages */}
                     {message.text && (
-                        <p className={`mt-2 text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>{message.text}</p>
+                        <p className={`mt-2 text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                            {message.text}
+                        </p>
                     )}
 
-                    {/* Buttons */}
                     <div className="button-container">
                         <button 
                             type="button" 
