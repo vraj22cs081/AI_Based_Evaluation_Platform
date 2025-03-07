@@ -56,6 +56,10 @@ const assignmentSchema = new mongoose.Schema({
     submissions: [submissionSchema],
     assignmentFile: {
         type: String
+    },
+    idealAnswers: {
+        type: Object,
+        required: true
     }
 }, {
     timestamps: true

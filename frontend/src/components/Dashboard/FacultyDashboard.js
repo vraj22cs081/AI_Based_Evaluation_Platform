@@ -742,11 +742,13 @@ const FacultyDashboard = () => {
                         if (assignment._id === assignmentId) {
                             const updatedSubmissions = assignment.submissions.map(sub => {
                                 if (sub._id === submissionId) {
+                                    console.log('Received grade from backend:', response.data.grade);
                                     return {
                                         ...sub,
-                                        grade: response.data.grade,
+                                        grade: parseInt(response.data.grade),
                                         feedback: response.data.feedback,
-                                        isAutoGraded: true
+                                        isAutoGraded: true,
+                                        status: 'graded'
                                     };
                                 }
                                 return sub;
@@ -757,6 +759,7 @@ const FacultyDashboard = () => {
                     })
                 );
                 
+                // Force a re-render
                 triggerUpdate();
             }
         } catch (error) {

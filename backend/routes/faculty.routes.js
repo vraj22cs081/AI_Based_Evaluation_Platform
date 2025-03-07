@@ -12,6 +12,34 @@ const multer = require('multer');
 const PDFParser = require('pdf2json');
 const axios = require('axios');
 
+// Add this helper function at the top of the file after imports
+const extractPDFText = async (filePath) => {
+    try {
+        const pdfParser = new PDFParser(null, 1);
+        const pdfText = await new Promise((resolve, reject) => {
+            pdfParser.on('pdfParser_dataReady', (pdfData) => {
+                let text = '';
+                for (let page of pdfData.Pages) {
+                    for (let textItem of page.Texts) {
+                        // Handle each text element properly
+                        if (textItem.R && textItem.R.length > 0) {
+                            text += textItem.R.map(r => decodeURIComponent(r.T)).join('') + ' ';
+                        }
+                    }
+                    text += '\n'; // Add newline between pages
+                }
+                resolve(text.trim());
+            });
+            pdfParser.on('pdfParser_dataError', reject);
+            pdfParser.loadPDF(filePath);
+        });
+        return pdfText;
+    } catch (error) {
+        console.error('PDF extraction error:', error);
+        throw error;
+    }
+};
+
 // Get faculty's classrooms
 router.get('/classrooms', authMiddleware('Faculty'), async (req, res) => {
     try {
@@ -296,58 +324,102 @@ router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), a
         const { title, description, dueDate, maxMarks, assignmentFile } = req.body;
         const facultyId = req.user._id;
 
-        console.log('Creating assignment with data:', {
-            classroomId,
+        // Extract text from faculty's assignment document
+        const assignmentFilePath = path.join(__dirname, '..', assignmentFile);
+        const assignmentText = await extractPDFText(assignmentFilePath);
+        console.log('Faculty Assignment Text:', assignmentText);
+
+        // Generate ideal answers using AI with better prompt
+        const idealAnswersResponse = await axios.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            {
+                model: "llama3-8b-8192",
+                messages: [
+                    {
+                        role: "system",
+                        content: "You are a subject matter expert creating ideal answers and marking criteria. Keep answers concise and within token limits."
+                    },
+                    {
+                        role: "user",
+                        content: `
+                            Based on this assignment:
+                            Title: ${title}
+                            Description: ${description}
+                            Content: ${assignmentText}
+
+                            Create a concise ideal answer sheet with marking criteria.
+                            Keep each answer under 200 words.
+                            
+                            Respond ONLY with this exact JSON structure:
+                            {
+                                "questions": [
+                                    {
+                                        "questionNumber": number,
+                                        "idealAnswer": "brief answer",
+                                        "keyPoints": ["point1", "point2"],
+                                        "maxMarks": number,
+                                        "markingCriteria": ["criteria1", "criteria2"]
+                                    }
+                                ],
+                                "totalMarks": ${maxMarks}
+                            }
+                        `
+                    }
+                ],
+                max_tokens: 4000,
+                temperature: 0.1
+            },
+            {
+                headers: { 
+                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+
+        // Parse and validate the response
+        let idealAnswers;
+        try {
+            const responseContent = idealAnswersResponse.data.choices[0].message.content.trim();
+            console.log('Raw AI Response:', responseContent);
+            
+            // Clean the response string before parsing
+            const cleanedContent = responseContent
+                .replace(/[\n\r]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .replace(/\\./g, '')
+                .replace(/[^\x20-\x7E]/g, '')
+                .replace(/```[^`]*```/g, ''); // Remove code blocks
+            
+            // Try to extract valid JSON
+            const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                idealAnswers = JSON.parse(jsonMatch[0]);
+            } else {
+                throw new Error('No valid JSON found in response');
+            }
+
+            // Validate the structure
+            if (!idealAnswers.questions || !Array.isArray(idealAnswers.questions)) {
+                throw new Error('Invalid response structure');
+            }
+        } catch (parseError) {
+            console.error('AI response parsing error:', parseError);
+            throw new Error('Failed to generate ideal answers');
+        }
+
+        // Create and save the assignment
+        const assignment = new Assignment({
             title,
             description,
             dueDate,
             maxMarks,
             assignmentFile,
-            facultyId
-        });
-
-        // Validate required fields
-        if (!title || !description || !dueDate || !maxMarks || !assignmentFile) {
-            return res.status(400).json({
-                success: false,
-                message: 'All fields are required'
-            });
-        }
-
-        // Find and update the classroom using findOneAndUpdate
-        const classroom = await Classroom.findOneAndUpdate(
-            {
-                _id: classroomId,
-                faculty: facultyId
-            },
-            {
-                $setOnInsert: { assignments: [] } // Initialize assignments array if it doesn't exist
-            },
-            {
-                new: true, // Return the updated document
-                upsert: false // Don't create if it doesn't exist
-            }
-        );
-
-        if (!classroom) {
-            return res.status(404).json({
-                success: false,
-                message: 'Classroom not found or unauthorized'
-            });
-        }
-
-        // Create new assignment
-        const assignment = new Assignment({
-            title,
-            description,
-            dueDate: new Date(dueDate),
-            maxMarks: Number(maxMarks),
-            assignmentFile,
             classroom: classroomId,
-            createdBy: facultyId
+            createdBy: facultyId,
+            idealAnswers
         });
 
-        // Save the assignment
         await assignment.save();
 
         // Update classroom with new assignment using $push
@@ -364,22 +436,18 @@ router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), a
         const classroomWithStudents = await Classroom.findById(classroomId)
             .populate('students', 'email name');
 
-        if (classroomWithStudents.students && classroomWithStudents.students.length > 0) {
-            console.log('Sending notifications to students:', classroomWithStudents.students);
-            
-            for (const student of classroomWithStudents.students) {
-                try {
-                    await notifyNewAssignment(
-                        student.email,
-                        student.name,
-                        title,
-                        dueDate,
-                        classroom.name
-                    );
-                    console.log(`Notification sent to ${student.email}`);
-                } catch (emailError) {
-                    console.error(`Failed to send notification to ${student.email}:`, emailError);
-                }
+        // Send notifications to students
+        console.log('Sending notifications to students:', classroomWithStudents.students);
+
+        for (const student of classroomWithStudents.students) {
+            try {
+                await notifyNewAssignment(
+                    student,
+                    assignment,
+                    classroomWithStudents.name // Use classroomWithStudents instead of classroom
+                );
+            } catch (error) {
+                console.error(`Failed to send notification to ${student.email}:`, error);
             }
         }
 
@@ -392,8 +460,7 @@ router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), a
         console.error('Error creating assignment:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to create assignment',
-            error: error.message
+            message: error.message || 'Failed to create assignment'
         });
     }
 });
@@ -522,7 +589,8 @@ router.put('/assignments/:assignmentId/submissions/:submissionId/grade', authMid
         const assignment = await Assignment.findOne({
             _id: assignmentId,
             createdBy: facultyId
-        }).populate('submissions.student', 'name email');
+        }).populate('submissions.student', 'name email')
+          .populate('classroom', 'name');  // Add this to get classroom name
 
         if (!assignment) {
             return res.status(404).json({
@@ -542,6 +610,23 @@ router.put('/assignments/:assignmentId/submissions/:submissionId/grade', authMid
         submission.grade = grade;
         submission.feedback = feedback;
         await assignment.save();
+
+        // Send email notification
+        try {
+            await notifyGradePosted(
+                submission.student.email,
+                submission.student.name,
+                assignment.title,
+                grade,
+                assignment.maxMarks,
+                feedback,
+                assignment.classroom.name
+            );
+            console.log('Grade notification email sent successfully');
+        } catch (emailError) {
+            console.error('Error sending grade notification:', emailError);
+            // Don't fail the grading if email fails
+        }
 
         res.json({
             success: true,
@@ -828,7 +913,6 @@ router.get('/student/assignments', authMiddleware('Student'), async (req, res) =
 
 // Auto-grade submission using Groq API
 router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', authMiddleware('Faculty'), async (req, res) => {
-    let submission = null;
     try {
         const { assignmentId, submissionId } = req.params;
         const assignment = await Assignment.findById(assignmentId)
@@ -839,7 +923,7 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
             return res.status(404).json({ success: false, message: 'Assignment not found' });
         }
 
-        submission = assignment.submissions.id(submissionId);
+        const submission = assignment.submissions.id(submissionId);
         if (!submission) {
             return res.status(404).json({ success: false, message: 'Submission not found' });
         }
@@ -890,40 +974,42 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
 
             console.log('PDF Content extracted successfully');
 
-            // Prepare prompt for Groq API
-            const fullPrompt = `
-                Assignment Details:
-                Title: ${assignment.title}
-                Description: ${assignment.description}
-                Maximum Marks: ${assignment.maxMarks}
-                
-                Student Submission:
-                ${pdfContent}
-                
-                You are a teacher grading this assignment. Grade it out of ${assignment.maxMarks} marks.
-                Your response must be in this exact JSON format without any additional text:
-                {"grade": <number between 0 and ${assignment.maxMarks}>, "feedback": "<brief feedback about the submission>"}
-            `;
+            // Extract text from student's submission
+            const submissionText = await extractPDFText(submissionFilePath);
+            console.log('Student Submission Text:', submissionText);
 
-            console.log('Calling Groq API...');
+            // Get ideal answers from assignment
+            const idealAnswers = assignment.idealAnswers;
 
-            // Call Groq API
-            const response = await axios.post(
+            // Compare with ideal answers
+            const gradingResponse = await axios.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 {
-                    model: "llama3-8b-8192",
+                    model: "llama-3.3-70b-versatile",
                     messages: [
                         {
                             role: "system",
-                            content: "You are a teacher grading assignments. You must respond only with valid JSON in the format: {\"grade\": number, \"feedback\": \"string\"}"
+                            content: "You are grading a student submission against ideal answers."
                         },
                         {
                             role: "user",
-                            content: fullPrompt
+                            content: `
+                                Compare this submission with the ideal answers:
+
+                                Ideal Answers: ${JSON.stringify(idealAnswers)}
+                                
+                                Student Submission: ${submissionText}
+
+                                Assignment Maximum Marks: ${assignment.maxMarks}
+
+                                Grade based on matching key points and criteria.
+                                Important: The grade should be calculated out of ${assignment.maxMarks} marks, not out of 100.
+                                Respond in JSON: {"grade": number, "feedback": "string"}
+                            `
                         }
                     ],
-                    max_tokens: 500,
-                    temperature: 0.7,
+                    max_tokens: 2000,
+                    temperature: 0.3,
                 },
                 {
                     headers: { 
@@ -935,15 +1021,22 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
 
             // Parse the AI response with error handling
             try {
-                const responseContent = response.data.choices[0].message.content.trim();
-                console.log('API Response:', responseContent);
+                const responseContent = gradingResponse.data.choices[0].message.content.trim();
+                console.log('Raw API Response:', responseContent);
+                
+                // Clean the response string before parsing
+                const cleanedContent = responseContent
+                    .replace(/[\n\r]/g, ' ') // Remove newlines
+                    .replace(/\s+/g, ' ') // Normalize spaces
+                    .replace(/\\./g, '') // Remove escape sequences
+                    .replace(/[^\x20-\x7E]/g, ''); // Remove non-printable characters
                 
                 let aiResponse;
                 try {
-                    aiResponse = JSON.parse(responseContent);
+                    aiResponse = JSON.parse(cleanedContent);
                 } catch (parseError) {
                     // If JSON parse fails, try to extract JSON from the text
-                    const jsonMatch = responseContent.match(/\{[\s\S]*\}/);
+                    const jsonMatch = cleanedContent.match(/\{[^{}]*\}/);
                     if (jsonMatch) {
                         aiResponse = JSON.parse(jsonMatch[0]);
                     } else {
@@ -952,23 +1045,24 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
                 }
 
                 // Validate the response format
-                if (!aiResponse.grade || !aiResponse.feedback) {
+                if (!aiResponse || typeof aiResponse.grade === 'undefined' || !aiResponse.feedback) {
                     throw new Error('Invalid response format from API');
                 }
 
-                // Ensure grade is within bounds
-                aiResponse.grade = Math.min(Math.max(0, aiResponse.grade), assignment.maxMarks);
+                // Calculate proportional grade
+                const finalGrade = Math.min(Math.max(0, parseFloat(aiResponse.grade)), assignment.maxMarks);
 
                 // Update submission
-                submission.grade = aiResponse.grade;
+                submission.grade = finalGrade;
                 submission.feedback = aiResponse.feedback;
                 submission.isAutoGraded = true;
                 await assignment.save();
 
+                // Send the converted grade to frontend
                 res.json({
                     success: true,
                     message: 'Assignment auto-graded successfully',
-                    grade: aiResponse.grade,
+                    grade: finalGrade,
                     feedback: aiResponse.feedback
                 });
             } catch (parseError) {
@@ -986,17 +1080,10 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
             });
         }
     } catch (error) {
-        console.error('Auto-grading error details:', {
-            error: error.message,
-            stack: error.stack,
-            submissionDetails: submission ? {
-                url: submission.submissionUrl,
-                id: submission._id
-            } : 'No submission found'
-        });
+        console.error('Auto-grading error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to auto-grade assignment: ' + error.message
+            message: 'Failed to auto-grade assignment'
         });
     }
 });
