@@ -1,4 +1,5 @@
 import React from 'react';
+import { getBaseUrl } from '../../config/api.config';
 
 const formatDate = (date) => {
     return new Date(date).toLocaleString('en-US', {
@@ -33,7 +34,7 @@ const AssignmentList = ({ assignments, onGrade }) => {
                     {assignment.assignmentFile && (
                         <div className="mt-2">
                             <a 
-                                href={`http://localhost:9000${assignment.assignmentFile}`}
+                                href={getBaseUrl(`${assignment.assignmentFile}`)}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="text-blue-500 hover:text-blue-700 text-sm"
@@ -72,7 +73,7 @@ const AssignmentList = ({ assignments, onGrade }) => {
                                     </div>
                                     {submission.submissionUrl && (
                                         <a 
-                                            href={`http://localhost:9000${submission.submissionUrl}`}
+                                            href={`${getBaseUrl(submission.submissionUrl)}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="text-blue-500 hover:text-blue-700 text-sm"

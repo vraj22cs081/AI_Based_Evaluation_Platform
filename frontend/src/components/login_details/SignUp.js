@@ -4,6 +4,7 @@ import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import './login.css';
 import Header from '../header/Header';
+import { getApiUrl } from '../../config/api.config';
 
 const SignUp = () => {
     const [formData, setFormData] = useState({
@@ -24,7 +25,7 @@ const SignUp = () => {
 
     const checkAdminLimit = async () => {
         try {
-            const response = await axios.get('http://localhost:9000/api/auth/check-admin-limit');
+            const response = await axios.get(getApiUrl('/auth/check-admin-limit'));
             if (response.data.adminLimitReached) {
                 setAvailableRoles(['Faculty', 'Student']);
             }
@@ -43,11 +44,7 @@ const SignUp = () => {
         setSuccess("");
 
         try {
-            const response = await axios.post(
-                "http://localhost:9000/api/auth/signup",
-                formData,
-                { withCredentials: true }
-            );
+            const response = await axios.post(getApiUrl('/auth/signup'), formData);
 
             if (response.data.success) {
                 setSuccess("Registration successful! Redirecting to login...");

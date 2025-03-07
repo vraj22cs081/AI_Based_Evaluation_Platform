@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import LoadingSpinner from '../LoadingSpinner';
+import { getBaseUrl } from '../../config/api.config';
 
 const GradeSubmissionModal = ({ assignment, submission, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
@@ -115,7 +116,7 @@ const GradeSubmissionModal = ({ assignment, submission, onClose, onSubmit }) => 
 
                     {submission.submissionUrl && (
                         <a
-                            href={`http://localhost:9000${submission.submissionUrl}`}
+                            href={getBaseUrl(`${submission.submissionUrl}`)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="btn btn-sm d-flex align-items-center gap-2"

@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import './login.css';
 import Header from '../header/Header';
+import { getApiUrl } from '../../config/api.config';
 
 const Login = () => {
     const navigate = useNavigate();
@@ -45,7 +46,7 @@ const Login = () => {
         setError('');
 
         try {
-            const response = await axios.post('http://localhost:9000/api/auth/login', formData);
+            const response = await axios.post(getApiUrl('/auth/login'), formData);
 
             if (response.data.success) {
                 login(

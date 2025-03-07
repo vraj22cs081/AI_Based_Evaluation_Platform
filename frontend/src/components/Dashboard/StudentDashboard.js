@@ -10,6 +10,7 @@ import AssignmentSubmissionModal from '../Assignment/AssignmentSubmissionModal';
 import JoinClassroomModal from '../Classroom/JoinClassroomModal';
 import Header from '../header/Header';
 import { useUpdate } from '../../context/UpdateContext';
+import { getApiUrl, getBaseUrl } from '../../config/api.config';
 
 
 const StudentDashboard = () => {
@@ -54,7 +55,7 @@ const StudentDashboard = () => {
                 const token = sessionStorage.getItem(`token_${sessionId}`);
 
                 const response = await axios.post(
-                    `http://localhost:9000/api/student/classrooms/${classroomId}/exit`,
+                    getApiUrl(`/student/classrooms/${classroomId}/exit`),
                     {},
                     {
                         headers: {
@@ -84,7 +85,7 @@ const StudentDashboard = () => {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
-            const response = await axios.get('http://localhost:9000/api/student/classrooms/enrolled', {
+            const response = await axios.get(getApiUrl('/student/classrooms/enrolled'), {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'X-Session-ID': sessionId
@@ -139,7 +140,7 @@ const StudentDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.get(
-                `http://localhost:9000/api/student/classrooms/${classroomId}/assignments`,
+                getApiUrl(`/student/classrooms/${classroomId}/assignments`),
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -166,7 +167,7 @@ const StudentDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.post(
-                `http://localhost:9000/api/student/assignments/${selectedAssignment._id}/submit`,
+                getApiUrl(`/student/assignments/${selectedAssignment._id}/submit`),
                 { submissionFile: fileUrl },
                 {
                     headers: {
@@ -206,7 +207,7 @@ const StudentDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.post(
-                'http://localhost:9000/api/student/classrooms/join',
+                getApiUrl('/student/classrooms/join'),
                 { roomCode },
                 {
                     headers: {
@@ -452,7 +453,7 @@ const StudentDashboard = () => {
                                                                     Assignment Document
                                                                 </h6>
                                                                 <a
-                                                                    href={`http://localhost:9000${assignment.assignmentFile}`}
+                                                                    href={getBaseUrl(`${assignment.assignmentFile}`)}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     className="btn btn-sm d-flex align-items-center gap-2"
@@ -521,7 +522,7 @@ const StudentDashboard = () => {
                                                                         </small>
                                                                         {assignment.submission.submissionUrl && (
                                                                             <a 
-                                                                                href={`http://localhost:9000${assignment.submission.submissionUrl}`}
+                                                                                href={getBaseUrl(`${assignment.submission.submissionUrl}`)}
                                                                                 target="_blank"
                                                                                 rel="noopener noreferrer"
                                                                                 className="btn btn-link btn-sm p-0 text-primary"

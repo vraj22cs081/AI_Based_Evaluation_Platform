@@ -20,7 +20,9 @@ const app = express();
 
 // Middleware
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.NODE_ENV === 'production' 
+        ? process.env.FRONTEND_URL 
+        : 'http://localhost:3000',
     credentials: true
 }));
 app.use(express.json());
@@ -59,6 +61,15 @@ app.get('/api/auth/status', (req, res) => {
         res.json({ isAuthenticated: false });
     }
 });
+
+// Serve static files in production
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '../frontend/build')));
+    
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../frontend/build', 'index.html'));
+    });
+}
 
 // Error handling middleware (should be last)
 app.use(errorHandler);

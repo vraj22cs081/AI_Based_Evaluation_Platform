@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import './AssignmentSubmissionModal.css';
+import { getApiUrl } from '../../config/api.config';
 
 const AssignmentSubmissionModal = ({ assignment, onClose }) => {
     const [file, setFile] = useState(null);
@@ -40,7 +41,7 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.post(
-                `http://localhost:9000/api/student/assignments/${assignment._id}/submit`,
+                getApiUrl(`/student/assignments/${assignment._id}/submit`),
                 formData,
                 {
                     headers: {

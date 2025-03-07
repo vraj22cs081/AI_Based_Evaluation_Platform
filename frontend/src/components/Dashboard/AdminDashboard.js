@@ -5,6 +5,7 @@ import axios from 'axios';
 import LoadingSpinner from '../LoadingSpinner';
 import Header from '../header/Header';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { getApiUrl } from '../../config/api.config';
 
 const AdminDashboard = () => {
     const [users, setUsers] = useState([]);
@@ -51,7 +52,7 @@ const AdminDashboard = () => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:9000/api/admin/users', {
+            const response = await axios.get(getApiUrl('/admin/users'), {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(response.data.users);
@@ -66,7 +67,7 @@ const AdminDashboard = () => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const response = await axios.get('http://localhost:9000/api/admin/classrooms', {
+            const response = await axios.get(getApiUrl('/admin/classrooms'), {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setClassrooms(response.data.classrooms);
@@ -106,7 +107,7 @@ const AdminDashboard = () => {
         if (window.confirm(`Are you sure you want to delete this ${type}?`)) {
             try {
                 const token = localStorage.getItem('token');
-                await axios.delete(`http://localhost:9000/api/admin/${type}/${id}`, {
+                await axios.delete(getApiUrl(`/admin/${type}/${id}`), {
                     headers: { Authorization: `Bearer ${token}` }
                 });
                 // Only refresh the current tab's data

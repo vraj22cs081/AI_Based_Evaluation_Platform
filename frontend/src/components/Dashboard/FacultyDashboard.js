@@ -10,6 +10,8 @@ import CreateClassroomModal from '../Classroom/CreateClassroomModal';
 import Header from '../header/Header';
 import './Dashboard.css';
 import { useUpdate } from '../../context/UpdateContext';
+import { getApiUrl } from '../../config/api.config';
+import { getBaseUrl } from '../../config/api.config';
 
 const FacultyDashboard = () => {
     const [classrooms, setClassrooms] = useState([]);
@@ -134,7 +136,7 @@ const FacultyDashboard = () => {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
-            const response = await axios.get('http://localhost:9000/api/faculty/classrooms', {
+            const response = await axios.get(getApiUrl('/faculty/classrooms'), {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'X-Session-ID': sessionId
@@ -146,7 +148,7 @@ const FacultyDashboard = () => {
                 const classroomsWithData = await Promise.all(
                     response.data.classrooms.map(async (classroom) => {
                         const assignmentsResponse = await axios.get(
-                            `http://localhost:9000/api/faculty/classrooms/${classroom._id}/assignments`,
+                            getApiUrl(`/faculty/classrooms/${classroom._id}/assignments`),
                             {
                                 headers: {
                                     Authorization: `Bearer ${token}`,
@@ -230,7 +232,7 @@ const FacultyDashboard = () => {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
             const response = await axios.post(
-                'http://localhost:9000/api/faculty/classrooms',
+                getApiUrl('/faculty/classrooms'),
                 formData,
                 {
                     headers: {
@@ -268,7 +270,7 @@ const FacultyDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.put(
-                `http://localhost:9000/api/faculty/classrooms/${selectedClassroom._id}`,
+                getApiUrl(`/faculty/classrooms/${selectedClassroom._id}`),
                 updatedData,
                 {
                     headers: {
@@ -321,7 +323,7 @@ const FacultyDashboard = () => {
                 const token = sessionStorage.getItem(`token_${sessionId}`);
 
                 const response = await axios.delete(
-                    `http://localhost:9000/api/faculty/classrooms/${classroomId}`,
+                    getApiUrl(`/faculty/classrooms/${classroomId}`),
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -365,7 +367,7 @@ const FacultyDashboard = () => {
                 const token = sessionStorage.getItem(`token_${sessionId}`);
 
                 const response = await axios.delete(
-                    `http://localhost:9000/api/faculty/classrooms/${classroomId}/students/${studentId}`,
+                    getApiUrl(`/faculty/classrooms/${classroomId}/students/${studentId}`),
                     {
                         headers: {
                             'Authorization': `Bearer ${token}`,
@@ -388,7 +390,7 @@ const FacultyDashboard = () => {
                         await fetchClassrooms();
                         if (selectedClassroom) {
                             const updatedClassroomResponse = await axios.get(
-                                `http://localhost:9000/api/faculty/classrooms/${classroomId}`,
+                                getApiUrl(`/faculty/classrooms/${classroomId}`),
                                 {
                                     headers: {
                                         'Authorization': `Bearer ${token}`,
@@ -423,7 +425,7 @@ const FacultyDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.get(
-                `http://localhost:9000/api/faculty/classrooms/${classroomId}/assignments`,
+                getApiUrl(`/faculty/classrooms/${classroomId}/assignments`),
                 {
                     headers: {
                         Authorization: `Bearer ${token}`,
@@ -451,7 +453,7 @@ const FacultyDashboard = () => {
                 fileFormData.append('file', formData.get('assignmentFile'));
 
                 const uploadResponse = await axios.post(
-                    'http://localhost:9000/api/faculty/upload',
+                    getApiUrl('/faculty/upload'),
                     fileFormData,
                     {
                         headers: {
@@ -468,7 +470,7 @@ const FacultyDashboard = () => {
             }
 
             const response = await axios.post(
-                `http://localhost:9000/api/faculty/classrooms/${selectedClassroom._id}/assignments`,
+                getApiUrl(`/faculty/classrooms/${selectedClassroom._id}/assignments`),
                 {
                     title: formData.get('title'),
                     description: formData.get('description'),
@@ -505,7 +507,7 @@ const FacultyDashboard = () => {
                 const token = sessionStorage.getItem(`token_${sessionId}`);
 
                 const response = await axios.delete(
-                    `http://localhost:9000/api/faculty/assignments/${assignmentId}`,
+                    getApiUrl(`/faculty/assignments/${assignmentId}`),
                     {
                         headers: {
                             Authorization: `Bearer ${token}`,
@@ -532,7 +534,7 @@ const FacultyDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.put(
-                `http://localhost:9000/api/faculty/assignments/${selectedAssignment._id}/submissions/${selectedSubmission._id}/grade`,
+                getApiUrl(`/faculty/assignments/${selectedAssignment._id}/submissions/${selectedSubmission._id}/grade`),
                 {
                     grade: parseInt(gradeData.grade),
                     feedback: gradeData.feedback || ''
@@ -618,7 +620,7 @@ const FacultyDashboard = () => {
                 fileFormData.append('file', formData.get('assignmentFile'));
 
                 const uploadResponse = await axios.post(
-                    'http://localhost:9000/api/faculty/upload',
+                    getApiUrl('/faculty/upload'),
                     fileFormData,
                     {
                         headers: {
@@ -636,7 +638,7 @@ const FacultyDashboard = () => {
 
             // Now update the assignment
             const response = await axios.put(
-                `http://localhost:9000/api/faculty/assignments/${editingAssignment._id}`,
+                getApiUrl(`/faculty/assignments/${editingAssignment._id}`),
                 {
                     title: formData.get('title'),
                     description: formData.get('description'),
@@ -692,7 +694,7 @@ const FacultyDashboard = () => {
 
             // Update the grade if faculty wants to modify it
             const response = await axios.put(
-                `http://localhost:9000/api/faculty/assignments/${assignmentId}/submissions/${submissionId}/grade`,
+                getApiUrl(`/faculty/assignments/${assignmentId}/submissions/${submissionId}/grade`),
                 {
                     grade: parseInt(currentGrade),
                     feedback: gradeModalData?.feedback || 'Reviewed auto-graded submission',
@@ -723,7 +725,7 @@ const FacultyDashboard = () => {
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
             const response = await axios.post(
-                `http://localhost:9000/api/faculty/assignments/${assignmentId}/submissions/${submissionId}/autograde`,
+                getApiUrl(`/faculty/assignments/${assignmentId}/submissions/${submissionId}/autograde`),
                 {},
                 {
                     headers: {
@@ -1242,7 +1244,7 @@ const FacultyDashboard = () => {
                                                             {assignment.assignmentFile && (
                                                                 <div className="mb-3">
                                                                     <a
-                                                                        href={`http://localhost:9000${assignment.assignmentFile}`}
+                                                                        href={getBaseUrl(`${assignment.assignmentFile}`)}
                                                                         target="_blank"
                                                                         rel="noopener noreferrer"
                                                                         className="btn btn-sm btn-light d-inline-flex align-items-center gap-2"

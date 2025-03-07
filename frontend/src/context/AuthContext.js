@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
+import { getApiUrl } from '../config/api.config';
 
 const AuthContext = createContext(null);
 //done 
@@ -92,7 +93,7 @@ export const AuthProvider = ({ children }) => {
                 return;
             }
 
-            const response = await axios.get('http://localhost:9000/api/auth/status', {
+            const response = await axios.get(getApiUrl('/auth/status'), {
                 headers: {
                     'Authorization': `Bearer ${token}`
                 }
@@ -139,7 +140,7 @@ export const AuthProvider = ({ children }) => {
     const logout = async () => {
         try {
             const token = sessionStorage.getItem(`token_${sessionId}`);
-            await axios.post('http://localhost:9000/api/auth/logout', {}, {
+            await axios.post(getApiUrl('/auth/logout'), {}, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     'X-Session-ID': sessionId

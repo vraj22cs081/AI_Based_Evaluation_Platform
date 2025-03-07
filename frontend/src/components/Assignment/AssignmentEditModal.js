@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getApiUrl } from '../../config/api.config';
 
 const AssignmentEditModal = ({ assignment, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
@@ -39,7 +40,7 @@ const AssignmentEditModal = ({ assignment, onClose, onSubmit }) => {
                 const sessionId = sessionStorage.getItem('sessionId');
                 const token = sessionStorage.getItem(`token_${sessionId}`);
                 
-                const uploadResponse = await fetch('http://localhost:9000/api/upload', {
+                const uploadResponse = await fetch(getApiUrl('/upload'), {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
