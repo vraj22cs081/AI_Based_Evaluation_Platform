@@ -1139,15 +1139,17 @@ const handleBatchAutoGrade = async () => {
                                         {/* View submission button - Add URL validation */}
                                         {submission.submissionUrl && submission.submissionUrl.trim() !== '' && (
                                             <a 
-                                                href={submission.submissionUrl} 
+                                                href={getBaseUrl(submission.submissionUrl)}
                                                 target="_blank" 
                                                 rel="noopener noreferrer"
                                                 className="btn btn-sm btn-outline-secondary"
                                                 onClick={(e) => {
-                                                    // Prevent navigation if URL seems invalid
-                                                    if (!submission.submissionUrl.startsWith('http')) {
+                                                    // Add validation before opening
+                                                    const url = getBaseUrl(submission.submissionUrl);
+                                                    if (!url) {
                                                         e.preventDefault();
-                                                        alert('Invalid document URL. Please contact support.');
+                                                        setError('Invalid submission URL');
+                                                        return;
                                                     }
                                                 }}
                                             >
@@ -2172,10 +2174,19 @@ const handleBatchAutoGrade = async () => {
                                                                                 {/* View submission button */}
                                                                                 {submission.submissionUrl && submission.submissionUrl.trim() !== '' && (
                                                                                     <a 
-                                                                                        href={submission.submissionUrl} 
+                                                                                        href={getBaseUrl(submission.submissionUrl)}
                                                                                         target="_blank" 
                                                                                         rel="noopener noreferrer"
                                                                                         className="btn btn-sm btn-outline-secondary submission-action-btn"
+                                                                                        onClick={(e) => {
+                                                                                            // Add validation before opening
+                                                                                            const url = getBaseUrl(submission.submissionUrl);
+                                                                                            if (!url) {
+                                                                                                e.preventDefault();
+                                                                                                setError('Invalid submission URL');
+                                                                                                return;
+                                                                                            }
+                                                                                        }}
                                                                                     >
                                                                                         <i className="fas fa-external-link-alt"></i>
                                                                                         <span>View</span>
