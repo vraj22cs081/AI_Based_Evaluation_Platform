@@ -69,20 +69,29 @@ const SignUp = () => {
             <div className="auth-container">
                 <div className="auth-form-container">
                     <div className="form-wrapper">
-                        <h2>Sign Up</h2>
+                        <h2>Create Account</h2>
+                        <p className="subtitle">Join us to get started with your journey</p>
+                        
                         {error && (
-                            <div className="error-message">{error}</div>
+                            <div className="error-message">
+                                <i className="fas fa-exclamation-circle"></i>
+                                {error}
+                            </div>
+                        )}
+                        
+                        {success && (
+                            <div className="success-message">
+                                <i className="fas fa-check-circle"></i>
+                                {success}
+                            </div>
                         )}
 
-                        {success && (
-                            <div className="success-message">{success}</div>
-                        )}
                         <form onSubmit={handleSubmit}>
                             <div className="input-field">
                                 <input
                                     type="text"
                                     name="name"
-                                    placeholder="Name"
+                                    placeholder="Enter your full name"
                                     value={formData.name}
                                     onChange={handleChange}
                                     required
@@ -92,7 +101,7 @@ const SignUp = () => {
                                 <input
                                     type="email"
                                     name="email"
-                                    placeholder="Email"
+                                    placeholder="Enter your email"
                                     value={formData.email}
                                     onChange={handleChange}
                                     required
@@ -102,7 +111,7 @@ const SignUp = () => {
                                 <input
                                     type="password"
                                     name="password"
-                                    placeholder="Password"
+                                    placeholder="Create a password"
                                     value={formData.password}
                                     onChange={handleChange}
                                     required
@@ -112,18 +121,18 @@ const SignUp = () => {
                                 <select
                                     name="role"
                                     value={formData.role}
-                                    onChange={(e) => setFormData({...formData, role: e.target.value})}
+                                    onChange={handleChange}
                                     required
-                                    className="form-control"
                                 >
-                                    <option value="">Select Role</option>
+                                    <option value="">Select your role</option>
                                     {availableRoles.map(role => (
                                         <option key={role} value={role}>{role}</option>
                                     ))}
                                 </select>
                             </div>
                             <button type="submit" className="auth-button">
-                                Sign Up
+                                <i className="fas fa-user-plus me-2"></i>
+                                Create Account
                             </button>
                         </form>
                         <p className="mt-4 text-center">

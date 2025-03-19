@@ -1,0 +1,925 @@
+/* Enhanced hover card effects */
+.hover-card {
+    transition: transform 0.3s ease-in-out, box-shadow 0.3s ease;
+}
+
+.hover-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* Background utilities */
+.bg-indigo {
+    background-color: #6366f1;
+}
+
+.bg-opacity-10 {
+    --bs-bg-opacity: 0.1;
+}
+
+/* Card component enhancements */
+.card {
+    overflow: hidden;
+    border: 1px solid rgba(0, 0, 0, 0.125);
+    border-radius: 0.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.card-header {
+    background-color: #fff;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    padding: 0.75rem 1.25rem;
+}
+
+/* Submissions header responsive styles */
+.card-header .btn {
+    min-height: 32px;
+    white-space: nowrap;
+}
+
+.card-header .badge {
+    min-height: 32px;
+    padding: 0.5rem 0.75rem;
+}
+
+@media (max-width: 768px) {
+    .card-header .card-title {
+        font-size: 1rem;
+    }
+    
+    .card-header .btn {
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+    
+    .card-header .badge {
+        padding: 0.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .card-header .d-flex {
+        width: 100%;
+    }
+    
+    .card-header .btn {
+        flex: 1;
+        justify-content: center;
+    }
+}
+
+/* Gradients for first-letter based coloring */
+.gradient-overlay {
+    position: relative;
+}
+
+.gradient-overlay::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(rgba(255,255,255,0), rgba(0,0,0,0.1));
+    pointer-events: none;
+}
+
+/* Metric tiles */
+.metric-tile {
+    height: 100%;
+    min-height: 80px;
+    display: flex;
+    align-items: center;
+    transition: background-color 0.2s ease;
+}
+
+.metric-tile:hover {
+    background-color: #f3f4f6 !important;
+}
+
+/* Add these styles for the assignment table */
+.assignment-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.assignment-table thead th {
+    font-weight: 600;
+    color: #4b5563;
+    border-bottom: 2px solid #e5e7eb;
+}
+
+.assignment-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.assignment-table tbody tr:hover {
+    background-color: #f9fafb;
+}
+
+.assignment-table td {
+    border-top: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+/* Status badge colors */
+.bg-success-subtle {
+    background-color: #ecfdf5;
+}
+
+.text-success {
+    color: #10b981;
+}
+
+.border-success-subtle {
+    border-color: #d1fae5;
+}
+
+.bg-danger-subtle {
+    background-color: #fef2f2;
+}
+
+.text-danger {
+    color: #ef4444;
+}
+
+.border-danger-subtle {
+    border-color: #fee2e2;
+}
+
+/* Add warning color styles */
+.bg-warning-subtle {
+    background-color: #fffbeb;
+}
+
+.text-warning {
+    color: #f59e0b !important;
+}
+
+.border-warning-subtle {
+    border-color: #fef3c7;
+}
+
+/* Add info color styles */
+.bg-info-subtle {
+    background-color: #eff6ff;
+}
+
+.text-info {
+    color: #3b82f6 !important;
+}
+
+.border-info-subtle {
+    border-color: #dbeafe;
+}
+
+/* Time remaining classes */
+.text-success {
+    color: #10b981 !important;
+}
+
+.text-warning {
+    color: #f59e0b !important;
+}
+
+.text-danger {
+    color: #ef4444 !important;
+}
+
+/* Feedback popup styles */
+.feedback-popup {
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+.feedback-overlay {
+    animation: fadeIn 0.2s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+/* Style for feedback content */
+.feedback-content {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    line-height: 1.6;
+    color: #374151;
+}
+
+/* Classroom card styles */
+.classroom-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    max-width: 400px; /* Prevent cards from getting too wide */
+    margin: 0 auto; /* Center cards in their grid cells */
+    width: 100%;
+}
+
+.classroom-card .card-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.classroom-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+/* Add classrooms grid layout */
+.classrooms-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    padding: 1rem 0;
+}
+
+/* Classroom Header Section Styles */
+.classroom-header {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.25rem;
+  background: white;
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.classroom-header-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.classroom-icon {
+  min-width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.classroom-details {
+  flex: 1;
+  min-width: 200px;
+}
+
+.classroom-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Toggle Buttons Styles */
+.toggle-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+  width: 300px;
+  justify-content: flex-end;
+}
+
+.toggle-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.toggle-buttons button i {
+  font-size: 1rem;
+}
+
+.toggle-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+  width: 300px; /* Fixed width for buttons section */
+  justify-content: flex-end;
+}
+
+.toggle-buttons button {
+  flex: 1;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.header-main {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 2rem;
+  align-items: center;
+  width: 100%;
+  padding: 1rem;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 300px; /* Fixed width for title section */
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  justify-content: center;
+  flex-grow: 1; /* Allow stats to take remaining space */
+}
+
+.stats-badge {
+  background: #f3f4f6;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Media Queries */
+@media (min-width: 768px) {
+  .classroom-header {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+  }
+
+  .classroom-details {
+    flex: 1;
+  }
+
+  .toggle-buttons {
+    margin-top: 0;
+    width: auto;
+  }
+
+  .toggle-buttons button {
+    flex: none;
+    min-width: 120px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .classroom-header {
+    padding: 2rem;
+  }
+
+  .toggle-buttons button {
+    min-width: 150px;
+  }
+}
+
+@media (max-width: 768px) {
+  .classroom-header {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .header-main {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .header-title {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .header-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .toggle-buttons {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .stats-badge {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .header-main {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    text-align: center;
+  }
+
+  .header-title {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .header-actions {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .stats-badge {
+    width: 100%;
+    text-align: center;
+  }
+
+  .toggle-buttons {
+    width: auto;
+    justify-content: center;
+    gap: 1rem;
+  }
+
+  .toggle-buttons button {
+    min-width: 44px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 8px;
+  }
+
+  .toggle-buttons button span {
+    display: none;
+  }
+
+  .toggle-buttons button i {
+    margin: 0;
+    font-size: 1.1rem;
+  }
+}
+
+/* Modern Submission Header Styles */
+.submission-header {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: white;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.submission-header-top {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.back-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.back-btn:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.submission-header-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+}
+
+.submission-title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.submission-title i {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.submission-title h5 {
+    margin: 0;
+    font-weight: 600;
+    color: #111827;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.submission-count {
+    height: 40px;
+    padding: 0 1.25rem;
+    border-radius: 10px;
+    background: #6366f1;
+    color: white;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.submission-header-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-shrink: 0;
+}
+
+.submission-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.action-btn {
+    height: 40px;
+    padding: 0 1.25rem;
+    border-radius: 10px;
+    border: 1px solid;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.9375rem;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.action-btn i {
+    font-size: 1rem;
+}
+
+.export-btn {
+    border-color: #10b981;
+    color: #10b981;
+    background: #ecfdf5;
+}
+
+.export-btn:hover {
+    background: #d1fae5;
+    border-color: #059669;
+}
+
+.grade-btn {
+    border-color: #6366f1;
+    color: #6366f1;
+    background: #eff6ff;
+}
+
+.grade-btn:hover {
+    background: #dbeafe;
+    border-color: #4f46e5;
+}
+
+@media (max-width: 768px) {
+    .submission-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+
+    .submission-header-left {
+        width: 100%;
+    }
+
+    .submission-header-right {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(36px, 1fr));
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .submission-header-bottom {
+        flex-direction: row;
+        align-items: center;
+    }
+
+    .submission-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .action-btn {
+        width: 36px;
+        padding: 0;
+        justify-content: center;
+    }
+
+    .action-btn span {
+        display: none;
+    }
+
+    .action-btn i {
+        margin: 0;
+    }
+
+    .submission-count {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+@media (max-width: 480px) {
+    .submission-header {
+        padding: 1rem;
+    }
+
+    .back-btn, .action-btn, .submission-count {
+        height: 36px;
+    }
+
+    .back-btn {
+        width: 36px;
+    }
+
+    .submission-header-right {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Section Header Styles */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.section-title i {
+  font-size: 1.25rem;
+  color: #6366f1;
+}
+
+.section-title h5 {
+  margin: 0;
+  font-weight: 600;
+  color: #111827;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 576px) {
+  .section-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: stretch;
+  }
+
+  .section-actions {
+    justify-content: flex-end;
+  }
+
+  .section-actions .btn {
+    flex: 1;
+  }
+}
+
+/* Action buttons container in submissions table */
+.submission-actions-container {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+}
+
+/* Individual action button styles */
+.submission-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    min-width: 90px;
+}
+
+@media (max-width: 768px) {
+    .submission-actions-container {
+       
+        width: 100%;
+    }
+
+    .submission-action-btn {
+        width: 100%;
+        padding: 0.5rem;
+        min-width: unset;
+    }
+
+    .submission-action-btn span {
+        display: none;
+    }
+
+    .submission-action-btn i {
+        margin: 0;
+        font-size: 1rem;
+    }
+}
+
+/* Icon Button Styles */
+.icon-button {
+    min-width: 110px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.75rem;
+}
+
+.icon-button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    background-color: #f3f4f6;
+}
+
+.icon-button:not(:disabled):hover {
+    background-color: #6b7280;
+    color: white;
+    border-color: #6b7280;
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+    .icon-button {
+        min-width: 36px;
+        padding: 0.375rem;
+    }
+
+    .icon-button span {
+        display: none;
+    }
+
+    .icon-button i {
+        margin: 0;
+    }
+}
+
+/* Tablet and Mobile Responsive Styles for Student Section */
+@media (max-width: 1024px) {
+  .students-section .table {
+    display: block;
+  }
+
+  .students-section thead {
+    display: none;
+  }
+
+  .students-section tbody tr {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1.25rem;
+    background: white;
+    border-radius: 12px;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+  }
+
+  /* Student Info Column */
+  .student-info-column {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+  }
+
+  .student-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+  }
+
+  .student-details {
+    flex: 1;
+  }
+
+  .student-name {
+    font-weight: 600;
+    color: #111827;
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .student-email {
+    color: #6b7280;
+    font-size: 0.875rem;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem 0;
+  }
+
+  .stat-item {
+    background: #f9fafb;
+    padding: 1rem;
+    border-radius: 8px;
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-value {
+    font-weight: 600;
+    color: #111827;
+    font-size: 1rem;
+  }
+
+  /* Action Buttons */
+  .action-column {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.75rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e5e7eb;
+  }
+
+  .action-button {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+}
+
+/* Mobile Specific Adjustments */
+@media (max-width: 768px) {
+  .students-section tbody tr {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .action-column {
+    flex-direction: column;
+  }
+
+  .action-button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* Small Mobile Adjustments */
+@media (max-width: 576px) {
+  .student-info-column {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
+  }
+
+  .student-avatar {
+    margin: 0 auto;
+  }
+}

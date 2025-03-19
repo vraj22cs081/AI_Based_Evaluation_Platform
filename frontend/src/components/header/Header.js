@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import './Header.css';
-import logo from '../../assets/logo.png';
+import logo from '../../assets/Logo3.png';  // Update import
 
 const Header = () => {
     const navigate = useNavigate();
@@ -47,7 +47,7 @@ const Header = () => {
                 </div>
                 {!isAuthPage() && (
                     <button onClick={handleLogout} className="logout-button">
-                        Logout
+                        <span>Logout</span>
                     </button>
                 )}
             </div>

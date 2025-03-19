@@ -10,6 +10,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import AdminDashboard from "./components/Dashboard/AdminDashboard";
 import FacultyDashboard from "./components/Dashboard/FacultyDashboard";
 import StudentDashboard from "./components/Dashboard/StudentDashboard";
+import LandingPage from "./components/LandingPage/LandingPage";
 // import StudentAssignmentList from "./components/Assignment/StudentAssignmentList";
 // import FacultyAssignmentList from "./components/Assignment/FacultyAssignmentList";
 // import ClassroomList from "./components/Classroom/ClassroomList";
@@ -51,7 +52,7 @@ function App() {
                 <AuthProvider>
                     <Router>
                         <Routes>
-                        <Route path="/" element={<Navigate to="/login" replace />} />
+                        <Route path="/" element={<LandingPage />} />
                         <Route path="/signup" element={<SignUp />} />
                         <Route path="/login" element={<Login />} />
                         <Route

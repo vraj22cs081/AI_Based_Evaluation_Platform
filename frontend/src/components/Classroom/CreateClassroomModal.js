@@ -24,15 +24,15 @@ const CreateClassroomModal = ({ onClose, onSubmit, isEdit, initialData }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        const studentEmails = formData.studentEmails
-            .split(',')
-            .map(email => email.trim())
-            .filter(email => email);
-        
-        onSubmit({
+        // Process student emails before submitting
+        const processedData = {
             ...formData,
-            studentEmails
-        });
+            studentEmails: formData.studentEmails
+                ? formData.studentEmails.split(',').map(email => email.trim()).filter(email => email)
+                : []
+        };
+        
+        onSubmit(processedData);
     };
 
     return (

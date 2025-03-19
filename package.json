@@ -28,6 +28,8 @@
     "pdf-parse": "^1.1.1",
     "pdf2json": "^3.1.4",
     "cloudinary": "^1.41.0",
-    "multer-storage-cloudinary": "^4.0.0"
+    "multer-storage-cloudinary": "^4.0.0",
+    "framer-motion": "^12.4.1"
+
   }
 } 

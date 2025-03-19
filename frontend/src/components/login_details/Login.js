@@ -68,9 +68,14 @@ const Login = () => {
             <div className="auth-container">
                 <div className="auth-form-container">
                     <div className="form-wrapper">
-                        <h2>Sign In</h2>
+                        <h2>Welcome Back</h2>
+                        <p className="subtitle">Sign in to continue to your dashboard</p>
+                        
                         {error && (
-                            <div className="error-message">{error}</div>
+                            <div className="error-message">
+                                <i className="fas fa-exclamation-circle"></i>
+                                {error}
+                            </div>
                         )}
 
                         <form onSubmit={handleSubmit}>
@@ -78,7 +83,7 @@ const Login = () => {
                                 <input
                                     type="email"
                                     name="email"
-                                    placeholder="Email address"
+                                    placeholder="Enter your email"
                                     value={formData.email}
                                     onChange={handleChange}
                                     required
@@ -88,19 +93,20 @@ const Login = () => {
                                 <input
                                     type="password"
                                     name="password"
-                                    placeholder="Password"
+                                    placeholder="Enter your password"
                                     value={formData.password}
                                     onChange={handleChange}
                                     required
                                 />
                             </div>
                             <button type="submit" className="auth-button">
+                                <i className="fas fa-sign-in-alt me-2"></i>
                                 Sign In
                             </button>
                         </form>
                         <p className="mt-4 text-center">
                             Don't have an account?{" "}
-                            <Link to="/signup" className="auth-link">Sign Up</Link>
+                            <Link to="/signup" className="auth-link">Create Account</Link>
                         </p>
                     </div>
                 </div>

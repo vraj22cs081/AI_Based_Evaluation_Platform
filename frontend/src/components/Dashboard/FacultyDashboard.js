@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // Remove useHistory, add useLocation
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import LoadingSpinner from '../LoadingSpinner';
@@ -12,6 +12,8 @@ import './Dashboard.css';
 import { useUpdate } from '../../context/UpdateContext';
 import { getApiUrl } from '../../config/api.config';
 import { getBaseUrl } from '../../config/api.config';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 const FacultyDashboard = () => {
     const [classrooms, setClassrooms] = useState([]);
@@ -41,6 +43,9 @@ const FacultyDashboard = () => {
     const { updateTrigger, triggerUpdate } = useUpdate();
     const [autoGradingStatus, setAutoGradingStatus] = useState({});
     const [gradeModalData, setGradeModalData] = useState(null);
+    const [urlValidationResults, setUrlValidationResults] = useState({});
+
+    const location = useLocation();
 
     const getBackgroundColor = (index) => {
         const colors = [
@@ -129,23 +134,120 @@ const FacultyDashboard = () => {
             .slice(0, 2);
     };
 
+    // Add this function at the beginning of your component function
+
+    // Function to show feedback popup
+    const showFeedbackPopup = (submissionId) => {
+        document.getElementById(`feedback-popup-${submissionId}`).style.display = 'block';
+        document.getElementById(`feedback-overlay-${submissionId}`).style.display = 'block';
+    };
+
+    // Function to hide feedback popup
+    const hideFeedbackPopup = (submissionId) => {
+        document.getElementById(`feedback-popup-${submissionId}`).style.display = 'none';
+        document.getElementById(`feedback-overlay-${submissionId}`).style.display = 'none';
+    };
+
+    // Add this utility function in your component
+
+    // Function to check if a URL exists
+    const checkUrlExists = async (url) => {
+        if (!url || !url.startsWith('http')) return false;
+        
+        try {
+            const response = await fetch(url, { method: 'HEAD', mode: 'no-cors' });
+            return true; // If we get here, the resource exists
+        } catch (error) {
+            console.error("Error checking URL:", error);
+            return false;
+        }
+    };
+
+    // Add this function to export submissions to Excel
+    const exportSubmissionsToExcel = () => {
+        if (!selectedAssignment || !selectedAssignment.submissions || selectedAssignment.submissions.length === 0) {
+            setError("No submissions to export");
+            return;
+        }
+    
+        try {
+            // Format the data for Excel
+            const submissionsData = selectedAssignment.submissions.map((submission, index) => {
+                // Get student info
+                const student = submission.student || 
+                    selectedClassroom.students?.find(s => s._id === submission.studentId) || 
+                    { name: 'Unknown Student' };
+                
+                // Create row data
+                return {
+                    'No.': index + 1,
+                    'Student Name': student.name,
+                    'Email': student.email || '',
+                    'Submission Date': new Date(submission.submittedAt).toLocaleString(),
+                    'Status': submission.grade !== undefined ? 'Graded' : 'Not Graded',
+                    'Grade': submission.grade !== undefined ? `${submission.grade}/${selectedAssignment.maxMarks}` : 'N/A',
+                    'Grading Method': submission.isAutoGraded ? 'AI Graded' : submission.grade !== undefined ? 'Manually Graded' : 'Not Graded',
+                    'Feedback': submission.feedback || '',
+                    'Submission URL': submission.submissionUrl || ''
+                };
+            });
+            
+            // Create worksheet
+            const worksheet = XLSX.utils.json_to_sheet(submissionsData);
+            
+            // Create column widths
+            const columnWidths = [
+                { wch: 5 },   // No.
+                { wch: 25 },  // Student Name
+                { wch: 30 },  // Email
+                { wch: 20 },  // Submission Date
+                { wch: 15 },  // Status
+                { wch: 10 },  // Grade
+                { wch: 15 },  // Grading Method
+                { wch: 40 },  // Feedback
+                { wch: 50 }   // Submission URL
+            ];
+            worksheet['!cols'] = columnWidths;
+            
+            // Create workbook
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Submissions");
+            
+            // Generate Excel file
+            const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+            const fileData = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            
+            // Create filename
+            const filename = `${selectedAssignment.title}_submissions_${new Date().toISOString().split('T')[0]}.xlsx`;
+            
+            // Save file
+            saveAs(fileData, filename);
+            
+            setSuccess('Submissions exported successfully');
+        } catch (error) {
+            console.error('Error exporting submissions:', error);
+            setError('Failed to export submissions');
+        }
+    };
+
     // Update the fetchClassrooms function to include assignments count
     const fetchClassrooms = useCallback(async () => {
         try {
-            setLoading(true);
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
-            const response = await axios.get(getApiUrl('/faculty/classrooms'), {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'X-Session-ID': sessionId
+            const response = await axios.get(
+                getApiUrl('/faculty/classrooms'),
+                {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'X-Session-ID': sessionId
+                    }
                 }
-            });
+            );
 
             if (response.data.success) {
-                // Fetch assignments for each classroom
-                const classroomsWithData = await Promise.all(
+                const classroomsWithAssignmentsCount = await Promise.all(
                     response.data.classrooms.map(async (classroom) => {
                         const assignmentsResponse = await axios.get(
                             getApiUrl(`/faculty/classrooms/${classroom._id}/assignments`),
@@ -156,49 +258,33 @@ const FacultyDashboard = () => {
                                 }
                             }
                         );
+
                         return {
                             ...classroom,
-                            assignmentsCount: assignmentsResponse.data.assignments?.length || 0
+                            assignmentsCount: assignmentsResponse.data.assignments.length
                         };
                     })
                 );
-                setClassrooms(classroomsWithData);
+
+                setClassrooms(classroomsWithAssignmentsCount);
             }
         } catch (error) {
+            console.error('Error fetching classrooms:', error);
             setError(error.response?.data?.message || 'Failed to fetch classrooms');
-            if (error.response?.status === 401) {
-                navigate('/login');
-            }
+            setLoading(false);
         } finally {
             setLoading(false);
         }
-    }, [navigate]);
+    }, []);
 
     useEffect(() => {
-        const checkAuth = async () => {
-            try {
-                if (userRole !== 'Faculty') {
-                    navigate('/login');
-                    return;
-                }
-                await fetchClassrooms();
-            } catch (error) {
-                console.error('Auth check failed:', error);
-                navigate('/login');
-            }
-        };
-        
-        checkAuth();
-    }, [userRole, navigate, fetchClassrooms]);
+        fetchClassrooms();
+    }, [fetchClassrooms]);
 
     useEffect(() => {
-        if (updateTrigger > 0) {
+        if (selectedClassroom) {
             const timer = setTimeout(async () => {
                 if (selectedClassroom) {
-                    // Fetch updated assignments
-                    await fetchAssignments(selectedClassroom._id);
-                } else {
-                    // Fetch updated classrooms list
                     await fetchClassrooms();
                 }
             }, 1000); // Reduced timeout for faster refresh
@@ -226,40 +312,128 @@ const FacultyDashboard = () => {
         refreshAssignments();
     }, [updateTrigger]);
 
+    // Then you could use this in useEffect to validate URLs for displayed submissions
+    useEffect(() => {
+        if (activeView === 'submissions' && selectedAssignment?.submissions?.length > 0) {
+            // Validate submission URLs
+            const validateUrls = async () => {
+                const validationResults = {};
+                
+                for (const submission of selectedAssignment.submissions) {
+                    if (submission.submissionUrl) {
+                        validationResults[submission._id] = await checkUrlExists(submission.submissionUrl);
+                    }
+                }
+                
+                setUrlValidationResults(validationResults);
+            };
+            
+            validateUrls();
+        }
+    }, [activeView, selectedAssignment]);
+
+    // Add this useEffect to handle browser history
+    useEffect(() => {
+        // When a classroom is selected, push that state to browser history
+        if (selectedClassroom) {
+            // Use navigate instead of history.push
+            navigate(location.pathname, {
+                state: { 
+                    view: 'classroom', 
+                    classroomId: selectedClassroom._id,
+                    activeView: activeView
+                }
+            });
+        }
+    }, [selectedClassroom, activeView, navigate, location.pathname]);
+    
+    // Add this useEffect to handle browser navigation events
+    useEffect(() => {
+        // Handle popstate event (back/forward button)
+        const handlePopState = (event) => {
+            const state = event.state?.state;
+            
+            // If we have state and it indicates we were viewing a classroom
+            if (state && state.view === 'classroom') {
+                // Find the classroom by ID
+                const classroom = classrooms.find(c => c._id === state.classroomId);
+                
+                // If found, set it as selected
+                if (classroom) {
+                    setSelectedClassroom(classroom);
+                    setActiveView(state.activeView || 'assignments');
+                    fetchAssignments(classroom._id);
+                }
+            } else {
+                // If no classroom in state, go back to list view
+                setSelectedClassroom(null);
+                setShowSubmissions(false);
+                setSelectedAssignment(null);
+                setAssignments([]);
+                setActiveView('assignments');
+            }
+        };
+        
+        // Add event listener
+        window.addEventListener('popstate', handlePopState);
+        
+        // Cleanup
+        return () => {
+            window.removeEventListener('popstate', handlePopState);
+        };
+    }, [classrooms]);
+
     // Modify handleCreateClassroom
     const handleCreateClassroom = async (formData) => {
         try {
+            setLoading(true);
+            
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
+
+            // Process student emails properly
+            const studentEmails = typeof formData.studentEmails === 'string' 
+                ? formData.studentEmails.split(',').map(email => email.trim()).filter(email => email)
+                : Array.isArray(formData.studentEmails) 
+                    ? formData.studentEmails 
+                    : [];
+
             const response = await axios.post(
-                getApiUrl('/faculty/classrooms'),
-                formData,
+                getApiUrl('/faculty/classrooms'), 
+                {
+                    name: formData.name,
+                    subject: formData.subject,
+                    description: formData.description,
+                    studentEmails: studentEmails
+                },
                 {
                     headers: {
-                        Authorization: `Bearer ${token}`,
+                        'Authorization': `Bearer ${token}`,
                         'X-Session-ID': sessionId
                     }
                 }
             );
 
             if (response.data.success) {
-                // Show success notification
+                // Add the new classroom to our state
+                const newClassroom = {
+                    ...response.data.classroom,
+                    students: [],
+                    assignmentsCount: 0
+                };
+                setClassrooms(prevClassrooms => [...prevClassrooms, newClassroom]);
+                
                 setSuccess('Classroom created successfully');
                 setShowCreateModal(false);
                 
-                // Update local state immediately
-                setClassrooms(prevClassrooms => [...prevClassrooms, response.data.classroom]);
-                
-                // Trigger background refresh
+                // Refresh data
                 triggerUpdate();
-                
-                // Fetch fresh data after a short delay
-                setTimeout(async () => {
-                    await fetchClassrooms();
-                }, 1000);
             }
         } catch (error) {
+            console.error('Error creating classroom:', error);
             setError(error.response?.data?.message || 'Failed to create classroom');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -423,7 +597,7 @@ const FacultyDashboard = () => {
         try {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
-
+    
             const response = await axios.get(
                 getApiUrl(`/faculty/classrooms/${classroomId}/assignments`),
                 {
@@ -436,6 +610,34 @@ const FacultyDashboard = () => {
 
             if (response.data.success) {
                 setAssignments(response.data.assignments);
+                return response.data.assignments;
+            }
+
+            // Add this right after you fetch assignments in fetchAssignments function
+            console.log('Assignments with submissions:', response.data.assignments);
+
+            // For a specific student, check how submissions are stored
+            const testStudent = selectedClassroom.students[0];
+            if (testStudent) {
+                console.log('Test student:', testStudent);
+                assignments.forEach(assignment => {
+                    const matchingSubmissions = assignment.submissions?.filter(
+                        sub => {
+                            // Log the details to see structure
+                            console.log('Checking submission:', {
+                                submissionId: sub._id,
+                                submissionStudentId: sub.studentId,
+                                submissionStudent: sub.student,
+                                testStudentId: testStudent._id
+                            });
+                            
+                            return (sub.studentId === testStudent._id) || 
+                                   (sub.student && sub.student._id === testStudent._id) ||
+                                   (sub.student && sub.student.email === testStudent.email);
+                        }
+                    );
+                    console.log(`Assignment ${assignment.title} - matching submissions:`, matchingSubmissions);
+                });
             }
         } catch (error) {
             setError(error.response?.data?.message || 'Failed to fetch assignments');
@@ -769,6 +971,120 @@ const FacultyDashboard = () => {
         }
     };
 
+    // Add this function to your component to handle batch grading
+
+const handleBatchAutoGrade = async () => {
+    // Get all ungraded submissions
+    const ungradedSubmissions = selectedAssignment.submissions.filter(
+        sub => sub.grade === undefined || sub.grade === null
+    );
+    
+    if (ungradedSubmissions.length === 0) {
+        setSuccess("All submissions are already graded!");
+        return;
+    }
+    
+    // Create a copy of the current status
+    const newStatus = { ...autoGradingStatus };
+    
+    // Set loading state
+    setLoading(true);
+    
+    // Show starting notification
+    setSuccess(`Started grading ${ungradedSubmissions.length} submissions...`);
+    
+    let completedCount = 0;
+    
+    // Process each submission sequentially
+    for (const submission of ungradedSubmissions) {
+        try {
+            // Update status for this submission
+            newStatus[submission._id] = 'processing';
+            setAutoGradingStatus({ ...newStatus });
+            
+            // Get auth credentials
+            const sessionId = sessionStorage.getItem('sessionId');
+            const token = sessionStorage.getItem(`token_${sessionId}`);
+            
+            // Call the API to grade this submission
+            const response = await axios.post(
+                getApiUrl(`/faculty/assignments/${selectedAssignment._id}/submissions/${submission._id}/autograde`),
+                {},
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'X-Session-ID': sessionId
+                    }
+                }
+            );
+            
+            if (response.data.success) {
+                // Update submission with grade
+                completedCount++;
+                
+                // Update the status
+                newStatus[submission._id] = 'completed';
+                setAutoGradingStatus({ ...newStatus });
+                
+                // Update progress notification every few submissions
+                if (completedCount % 3 === 0 || completedCount === ungradedSubmissions.length) {
+                    setSuccess(`Progress: ${completedCount}/${ungradedSubmissions.length} submissions graded`);
+                }
+                
+                // Update the assignments state with new grade
+                setAssignments(prevAssignments => 
+                    prevAssignments.map(assignment => {
+                        if (assignment._id === selectedAssignment._id) {
+                            const updatedSubmissions = assignment.submissions.map(sub => {
+                                if (sub._id === submission._id) {
+                                    return {
+                                        ...sub,
+                                        grade: parseInt(response.data.grade),
+                                        feedback: response.data.feedback,
+                                        isAutoGraded: true,
+                                        status: 'graded'
+                                    };
+                                }
+                                return sub;
+                            });
+                            return { ...assignment, submissions: updatedSubmissions };
+                        }
+                        return assignment;
+                    })
+                );
+                
+                // Update selected assignment if we're viewing it
+                if (selectedAssignment) {
+                    setSelectedAssignment(prev => ({
+                        ...prev,
+                        submissions: prev.submissions.map(sub => {
+                            if (sub._id === submission._id) {
+                                return {
+                                    ...sub,
+                                    grade: parseInt(response.data.grade),
+                                    feedback: response.data.feedback,
+                                    isAutoGraded: true,
+                                    status: 'graded'
+                                };
+                            }
+                            return sub;
+                        })
+                    }));
+                }
+            }
+        } catch (error) {
+            console.error(`Error grading submission ${submission._id}:`, error);
+            newStatus[submission._id] = 'error';
+            setAutoGradingStatus({ ...newStatus });
+        }
+    }
+    
+    // All done
+    setLoading(false);
+    setSuccess(`Successfully graded ${completedCount} out of ${ungradedSubmissions.length} submissions!`);
+    triggerUpdate(); // Refresh data
+};
+
     // Update the submissions table rendering
     const renderSubmissionsTable = () => {
         return (
@@ -818,25 +1134,62 @@ const FacultyDashboard = () => {
                                         '--'
                                     )}
                                 </td>
-                                <td>
-                                    <div className="btn-group">
-                                        <button
-                                            className="btn btn-primary btn-sm"
+                                <td style={{ padding: '16px' }}>
+                                    <div className="d-flex flex-wrap" style={{ gap: '8px' }}>
+                                        {/* View submission button - Add URL validation */}
+                                        {submission.submissionUrl && submission.submissionUrl.trim() !== '' && (
+                                            <a 
+                                                href={submission.submissionUrl} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer"
+                                                className="btn btn-sm btn-outline-secondary"
+                                                onClick={(e) => {
+                                                    // Prevent navigation if URL seems invalid
+                                                    if (!submission.submissionUrl.startsWith('http')) {
+                                                        e.preventDefault();
+                                                        alert('Invalid document URL. Please contact support.');
+                                                    }
+                                                }}
+                                            >
+                                                <i className="fas fa-external-link-alt me-1"></i> View
+                                            </a>
+                                        )}
+                                        
+                                        {/* AI Grade button - Fixed condition to check if grade is null or undefined */}
+                                        {(submission.grade === null || submission.grade === undefined) && (
+                                            <button
+                                                className="btn btn-sm btn-outline-info"
+                                                onClick={() => handleAutoGrade(selectedAssignment._id, submission._id)}
+                                                disabled={autoGradingStatus[submission._id] === 'processing'}
+                                                title="Grade using AI"
+                                            >
+                                                <i className="fas fa-robot me-1"></i>
+                                                {autoGradingStatus[submission._id] === 'processing' ? (
+                                                    <>
+                                                        <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                                        Grading...
+                                                    </>
+                                                ) : (
+                                                    'AI Grade'
+                                                )}
+                                            </button>
+                                        )}
+                                        
+                                        {/* Manual Grade button - Keep as is */}
+                                        <button 
+                                            className="btn btn-sm btn-outline-primary"
                                             onClick={() => {
                                                 setSelectedSubmission(submission);
+                                                setGradeModalData({
+                                                    grade: submission.grade || '',
+                                                    feedback: submission.feedback || ''
+                                                });
                                                 setShowGradeModal(true);
                                             }}
                                         >
-                                            {submission.grade ? 'Update Grade' : 'Grade'}
+                                            <i className={(submission.grade !== null && submission.grade !== undefined) ? "fas fa-edit" : "fas fa-check"}></i>
+                                            {(submission.grade !== null && submission.grade !== undefined) ? ' Update' : ' Grade'}
                                         </button>
-                                        {!submission.grade && (
-                                            <button
-                                                className="btn btn-info btn-sm ms-1"
-                                                onClick={() => handleAutoGrade(selectedAssignment._id, submission._id)}
-                                            >
-                                                Auto Grade
-                                            </button>
-                                        )}
                                     </div>
                                 </td>
                             </tr>
@@ -951,392 +1304,1177 @@ const FacultyDashboard = () => {
                     {success && <Notification type="success" message={success} onClose={() => setSuccess('')} />}
 
                     {/* Welcome Section */}
-                    <div className="card shadow-sm mb-4">
-                        <div className="card-body d-flex justify-content-between align-items-center">
-                            <div>
-                                <h2 className="mb-1">Welcome back, {userName}</h2>
-                                <p className="text-muted mb-0">{classrooms.length} Active Classrooms</p>
-                            </div>
-                            <button
-                                onClick={() => setShowCreateModal(true)}
-                                className="btn btn-primary px-4"
-                                style={{
-                                    background: '#6366f1',
-                                    borderColor: '#6366f1',
-                                    borderRadius: '8px'
-                                }}
-                            >
-                                + Create Classroom
-                            </button>
-                        </div>
-                    </div>
+                    <div 
+    className="card mb-4"
+    style={{
+        borderRadius: '16px',
+        border: 'none',
+        background: 'linear-gradient(145deg, #ffffff 0%, #f9fafb 100%)',
+        overflow: 'hidden'
+    }}
+>
+    <div 
+        className="card-body d-flex justify-content-between align-items-center p-4"
+        style={{
+            background: 'linear-gradient(to right, #6366f1 0%, #8b5cf6 100%)',
+            borderRadius: '12px',
+            position: 'relative',
+            overflow: 'hidden'
+        }}
+    >
+        {/* Background pattern overlay */}
+        <div 
+            style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                opacity: 0.1,
+                backgroundImage: 'radial-gradient(circle, #ffffff 10%, transparent 10.5%), radial-gradient(circle, #ffffff 10%, transparent 10.5%)',
+                backgroundSize: '30px 30px',
+                backgroundPosition: '0 0, 15px 15px'
+            }}
+        ></div>
+        
+        <div style={{ position: 'relative', zIndex: 5 }}>
+            <h2 className="mb-1" style={{ color: 'white', fontWeight: '600' }}>
+                Welcome back, {userName}
+            </h2>
+            <p className="mb-0" style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                {classrooms.length} Active {classrooms.length === 1 ? 'Classroom' : 'Classrooms'}
+            </p>
+        </div>
+        
+        <button
+            onClick={() => setShowCreateModal(true)}
+            className="btn px-4 py-2"
+            style={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                color: '#6366f1',
+                border: 'none',
+                borderRadius: '12px',
+                fontWeight: '500',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                zIndex: 5,
+                transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 1)';
+                e.currentTarget.style.boxShadow = '0 6px 16px rgba(0, 0, 0, 0.12)';
+            }}
+            onMouseOut={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.9)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+            }}
+        >
+            <i className="fas fa-plus me-2"></i> Create Classroom
+        </button>
+    </div>
+</div>
 
                     {!selectedClassroom ? (
-                        // Classroom Cards Grid
-                        <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-                            {classrooms.map((classroom, index) => (
-                                <div className="col" key={classroom._id}>
-                                    <div 
-                                        className="card h-100 border-0 shadow-sm"
-                                        onClick={() => handleClassroomClick(classroom)}
-                                    >
-                                        {/* Colored Header */}
-                                        <div 
-                                            className="card-header border-0 text-white py-5 text-center"
-                                            style={{
-                                                background: getBackgroundColor(index),
-                                                borderRadius: '12px 12px 0 0'
-                                            }}
-                                        >
-                                            <h3 className="display-4 mb-2">{classroom.name}</h3>
-                                            <span className="badge bg-white bg-opacity-25">
-                                                {classroom.subject}
-                                            </span>
-                                        </div>
+                        // Classroom Cards Grid - Modern redesign with FontAwesome icons
+                        <div className="classrooms-grid">
+    {classrooms.map((classroom, index) => (
+        <div 
+            key={classroom._id} 
+            className="card classroom-card shadow-sm"
+            onClick={() => handleClassroomClick(classroom)}
+            style={{
+                cursor: 'pointer',
+                borderRadius: '12px',
+                border: 'none',
+                overflow: 'hidden'
+            }}
+        >
+            {/* Card Header with colored background and actions */}
+            <div 
+                className="card-header py-3 border-0 d-flex justify-content-between align-items-center"
+                style={{
+                    backgroundColor: getBackgroundColor(index),
+                    color: 'white',
+                    borderRadius: '12px 12px 0 0',
+                    position: 'relative'
+                }}
+            >
+                {/* Left side - Icon and Title */}
+                <div className="d-flex align-items-center">
+                    <div 
+                        className="d-flex justify-content-center align-items-center me-2"
+                        style={{
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '8px',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)'
+                        }}
+                    >
+                        <i className="fas fa-graduation-cap"></i>
+                    </div>
+                    <h5 className="card-title text-white fw-bold mb-0" style={{ 
+                        fontSize: '1.1rem',
+                        textOverflow: 'ellipsis',
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap'
+                    }}>
+                        {classroom.name}
+                    </h5>
+                </div>
 
-                                        <div className="card-body border-bottom" style={{ padding: '1rem' }}>
-                                            <div className="d-flex justify-content-around">
-                                                <div className="text-center">
-                                                    <h6 className="mb-1" style={{ 
-                                                        color: '#4b5563', 
-                                                        fontSize: '0.875rem', 
-                                                        fontWeight: '600' 
-                                                    }}>
-                                                        <i className="bi bi-people me-2" style={{ color: '#6366f1' }}></i>
-                                                        Students
-                                                    </h6>
-                                                    <span className="fw-semibold" style={{ fontSize: '1.25rem' }}>
-                                                        {classroom.students?.length || 0}
-                                                    </span>
-                                                </div>
-                                                <div className="border-start" style={{ width: '1px', backgroundColor: '#e5e7eb' }}></div>
-                                                <div className="text-center">
-                                                    <h6 className="mb-1" style={{ 
-                                                        color: '#4b5563', 
-                                                        fontSize: '0.875rem', 
-                                                        fontWeight: '600' 
-                                                    }}>
-                                                        <i className="bi bi-journal-text me-2" style={{ color: '#6366f1' }}></i>
-                                                        Assignments
-                                                    </h6>
-                                                    <span className="fw-semibold" style={{ fontSize: '1.25rem' }}>
-                                                        {classroom.assignmentsCount || 0}
-                                                    </span>
-                                                </div>
-                                            </div>
+                {/* Right side - Action Buttons */}
+                <div className="d-flex" style={{ gap: '8px' }}>
+                    <button 
+                        className="btn btn-sm p-1"
+                        style={{ 
+                            width: '28px', 
+                            height: '28px', 
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            border: 'none'
+                        }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleEditClick(classroom, e);
+                        }}
+                        title="Edit classroom"
+                    >
+                        <i className="fas fa-edit"></i>
+                    </button>
+                    <button 
+                        className="btn btn-sm p-1"
+                        style={{ 
+                            width: '28px', 
+                            height: '28px', 
+                            borderRadius: '6px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: '#fff',
+                            backgroundColor: 'rgba(255,255,255,0.2)',
+                            border: 'none'
+                        }}
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDeleteClassroom(classroom._id);
+                        }}
+                        title="Delete classroom"
+                    >
+                        <i className="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+            </div>
+            
+            {/* Card Body */}
+            <div className="card-body p-3">
+                {/* Code and Subject row */}
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                    {/* Room Code */}
+                    <div className="d-flex align-items-center">
+                        <div style={{ 
+                            width: '32px', 
+                            height: '32px', 
+                            backgroundColor: '#f0f9ff',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '8px',
+                            marginRight: '8px'
+                        }}>
+                            <i className="fas fa-key" style={{ color: '#0ea5e9' }}></i>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Room Code</div>
+                            <div className="fw-bold" style={{ color: '#111827' }}>
+                                {classroom.roomCode}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Subject */}
+                    <div className="d-flex align-items-center">
+                        <div style={{ 
+                            width: '32px', 
+                            height: '32px', 
+                            backgroundColor: '#f0fdf4',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: '8px',
+                            marginRight: '8px'
+                        }}>
+                            <i className="fas fa-book" style={{ color: '#10b981' }}></i>
+                        </div>
+                        <div>
+                            <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Subject</div>
+                            <div className="fw-bold" style={{ color: '#111827' }}>
+                                {classroom.subject}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {/* Description */}
+                <div className="classroom-description mb-3" style={{ 
+                    height: '44px', 
+                    overflow: 'hidden',
+                    position: 'relative'
+                }}>
+                    <p className="card-text text-muted" style={{
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        display: '-webkit-box',
+                        WebkitLineClamp: '2',
+                        WebkitBoxOrient: 'vertical',
+                        lineHeight: '1.5',
+                        margin: 0
+                    }}>
+                        {classroom.description || 'No description available for this classroom.'}
+                    </p>
+                </div>
+                
+                {/* Metrics Sections */}
+                <div className="mt-auto">
+                    <div className="row g-2 row-cols-2">
+                        {/* Students Metric */}
+                        <div className="col">
+                            <div className="p-2 rounded-3 metric-tile" style={{ backgroundColor: '#f9fafb' }}>
+                                <div className="d-flex align-items-center">
+                                    <div style={{ 
+                                        width: '36px', 
+                                        height: '36px', 
+                                        backgroundColor: '#f0f9ff',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: '8px',
+                                        marginRight: '12px'
+                                    }}>
+                                        <i className="fas fa-users" style={{ color: '#0ea5e9' }}></i>
+                                    </div>
+                                    <div>
+                                        <div className="h5 m-0" style={{ fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+                                            {classroom.students?.length || 0}
                                         </div>
-
-                                        {/* Room Code Footer */}
-                                        <div className="card-footer bg-light border-0 py-3">
-                                            <div className="d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <small className="text-muted">Room Code:</small>
-                                                    <span className="ms-2 fw-semibold">{classroom.roomCode}</span>
-                                                </div>
-                                                <div onClick={(e) => e.stopPropagation()}>
-                                                    <button 
-                                                        className="btn btn-link text-primary p-0 me-3"
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            handleEditClick(classroom, e);
-                                                        }}
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                    <button 
-                                                        className="btn btn-link text-danger p-0"
-                                                        onClick={(e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            handleDeleteClassroom(classroom._id);
-                                                        }}
-                                                    >
-                                                        Delete
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Students</div>
                                     </div>
                                 </div>
-                            ))}
+                            </div>
                         </div>
+                        
+                        {/* Assignments Metric */}
+                        <div className="col">
+                            <div className="p-2 rounded-3 metric-tile" style={{ backgroundColor: '#f9fafb' }}>
+                                <div className="d-flex align-items-center">
+                                    <div style={{ 
+                                        width: '36px', 
+                                        height: '36px', 
+                                        backgroundColor: '#f0fdf4',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        borderRadius: '8px',
+                                        marginRight: '12px'
+                                    }}>
+                                        <i className="fas fa-clipboard-list" style={{ color: '#10b981' }}></i>
+                                    </div>
+                                    <div>
+                                        <div className="h5 m-0" style={{ fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+                                            {classroom.assignmentsCount || 0}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Assignments</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            {/* Card Footer with creation date */}
+            <div className="card-footer bg-white p-3 border-0" style={{ 
+                borderRadius: '0 0 12px 12px',
+                borderTop: '1px solid #f3f4f6'
+            }}>
+                <div className="d-flex align-items-center">
+                    <i className="fas fa-calendar-alt me-2" style={{ color: '#9ca3af', fontSize: '0.875rem' }}></i>
+                    <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                        Created on {new Date(classroom.createdAt).toLocaleDateString('en-US', { 
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                        })}
+                    </span>
+                </div>
+            </div>
+        </div>
+    ))}
+</div>
+
                     ) : (
                         // Assignments View
                         <div className="card shadow-sm">
                             <div className="card-body">
-                                <div className="d-flex justify-content-between align-items-center mb-4">
-                                    <div>
-                                        <h4 className="mb-1">{selectedClassroom.name}</h4>
-                                        <p className="text-muted mb-0">
-                                            {activeView === 'assignments' 
-                                                ? `${assignments.length} Assignment${assignments.length !== 1 ? 's' : ''}`
-                                                : `${selectedClassroom.students?.length || 0} Student${selectedClassroom.students?.length !== 1 ? 's' : ''}`
-                                            }
-                                        </p>
-                                    </div>
-                                    <div className="d-flex gap-3 align-items-center">
-                                        {/* Toggle Buttons */}
-                                        <div className="btn-group" role="group" aria-label="View toggle">
-                                            <button
-                                                className={`btn ${activeView === 'assignments' ? 'btn-primary' : 'btn-light'}`}
-                                                onClick={() => setActiveView('assignments')}
-                                                style={{
-                                                    background: activeView === 'assignments' ? '#6366f1' : '#fff',
-                                                    borderColor: activeView === 'assignments' ? '#6366f1' : '#e5e7eb',
-                                                    color: activeView === 'assignments' ? '#fff' : '#374151'
-                                                }}
-                                            >
-                                                <i className="bi bi-journal-text me-2"></i>
-                                                Assignments
-                                            </button>
-                                            <button
-                                                className={`btn ${activeView === 'students' ? 'btn-primary' : 'btn-light'}`}
-                                                onClick={() => setActiveView('students')}
-                                                style={{
-                                                    background: activeView === 'students' ? '#6366f1' : '#fff',
-                                                    borderColor: activeView === 'students' ? '#6366f1' : '#e5e7eb',
-                                                    color: activeView === 'students' ? '#fff' : '#374151'
-                                                }}
-                                            >
-                                                <i className="bi bi-people me-2"></i>
-                                                Students
-                                            </button>
-                                        </div>
-                                        
-                                        {activeView === 'assignments' && (
-                                            <button 
-                                                className="btn btn-primary"
-                                                onClick={() => setShowAssignmentModal(true)}
-                                                style={{
-                                                    background: '#6366f1',
-                                                    borderColor: '#6366f1'
-                                                }}
-                                            >
-                                                + Create Assignment
-                                            </button>
-                                        )}
-                                        <button 
-                                            className="btn btn-light d-flex align-items-center gap-2"
-                                            onClick={() => {
-                                                setSelectedClassroom(null);
-                                                setShowSubmissions(false);
-                                                setSelectedAssignment(null);
-                                                setAssignments([]);
-                                                setActiveView('assignments');
-                                            }}
-                                        >
-                                            <i className="bi bi-arrow-left"></i>
-                                            Back
-                                        </button>
-                                    </div>
-                                </div>
+                                <div className="classroom-header">
+  <div className="header-main">
+    <div className="header-title">
+      <div 
+        className="classroom-icon"
+        style={{
+          backgroundColor: getAssignmentColor(selectedClassroom.name.charAt(0).toUpperCase()),
+          color: 'white'
+        }}
+      >
+        <i className="fas fa-graduation-cap"></i>
+      </div>
+      <div>
+        <h4 className="mb-0">{selectedClassroom.name}</h4>
+        <span className="badge bg-light text-dark border">
+          {selectedClassroom.subject}
+        </span>
+      </div>
+    </div>
+
+    <div className="header-actions">
+      <div className="stats-badge">
+        <i className="fas fa-clipboard-list me-2"></i>
+        {assignments.length} Total Assignments
+      </div>
+      <div className="stats-badge">
+        <i className="fas fa-user-graduate me-2"></i>
+        {selectedClassroom.students?.length || 0} Students
+      </div>
+    </div>
+
+    <div className="toggle-buttons">
+  <button
+    className={`btn ${activeView === 'assignments' ? 'btn-primary' : 'btn-light'}`}
+    onClick={() => setActiveView('assignments')}
+    title="Assignments"
+  >
+    <i className="fas fa-tasks"></i>
+    <span>Assignments</span>
+  </button>
+  <button
+    className={`btn ${activeView === 'students' ? 'btn-primary' : 'btn-light'}`}
+    onClick={() => setActiveView('students')}
+    title="Students"
+  >
+    <i className="fas fa-users"></i>
+    <span>Students</span>
+  </button>
+</div>
+
+  </div>
+</div>
 
                                 {/* Content Area */}
-                                {activeView === 'assignments' ? (
-                                    showSubmissions ? (
-                                        // Submissions View
-                                        <div className="bg-white rounded-lg p-4">
-                                            <div className="d-flex justify-content-between align-items-center mb-4">
-                                                <div>
-                                                    <h4 className="mb-2">{selectedAssignment.title}</h4>
-                                                    <p className="text-muted">
-                                                        Total Submissions: {selectedAssignment.submissions?.length || 0}
-                                                    </p>
-                                                </div>
-                                                <button
-                                                    className="btn btn-light"
-                                                    onClick={() => {
-                                                        setShowSubmissions(false);
-                                                        setSelectedAssignment(null);
-                                                    }}
-                                                >
-                                                    Back to Assignments
-                                                </button>
-                                            </div>
+                                {activeView === 'assignments' && selectedClassroom && (
+    <div className="assignments-section mt-4">
+        <div className="card border-0 shadow-sm">
+            <div className="card-header section-header">
+  <div className="section-title">
+    <i className="fas fa-clipboard-list"></i>
+    <h5 className="mb-0">Assignments</h5>
+  </div>
+  <div className="section-actions">
+    <button 
+      className="btn btn-primary btn-sm d-flex align-items-center gap-2"
+      onClick={() => setShowAssignmentModal(true)}
+    >
+      <i className="fas fa-plus"></i>
+      <span>Assignment</span>
+    </button>
+  </div>
+</div>
 
-                                            {renderSubmissionsTable()}
-                                        </div>
-                                    ) : (
-                                        // Existing assignments grid view
-                                        <div className="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-                                            {assignments.map((assignment) => (
-                                                <div className="col" key={assignment._id}>
+            
+            <div className="card-body p-0">
+                {assignments.length > 0 ? (
+                    <div className="table-responsive">
+                        <table className="table table-hover assignment-table mb-0">
+                            <thead style={{ backgroundColor: '#f9fafb' }}>
+                                <tr>
+                                    <th style={{ width: '30%', padding: '12px 16px' }}>Assignment</th>
+                                    <th style={{ width: '15%', padding: '12px 16px' }}>Due Date</th>
+                                    <th style={{ width: '15%', padding: '12px 16px' }}>Status</th>
+                                    <th style={{ width: '15%', padding: '12px 16px' }}>Submissions</th>
+                                    <th style={{ width: '25%', padding: '12px 16px' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {assignments.map(assignment => {
+                                    // Get color based on first letter
+                                    const assignmentFirstLetter = assignment.title.charAt(0).toUpperCase();
+                                    const assignmentColor = getAssignmentColor(assignmentFirstLetter);
+                                    
+                                    // Format submission stats
+                                    const totalStudents = selectedClassroom.students?.length || 0;
+                                    const submissionCount = assignment.submissions?.length || 0;
+                                    const submissionRate = totalStudents === 0 
+                                        ? 0 
+                                        : Math.round((submissionCount / totalStudents) * 100);
+                                    
+                                    // Calculate time remaining
+                                    const timeRemaining = getFormattedTimeRemaining(assignment.dueDate);
+                                    const timeClass = getTimeRemainingClass(assignment.dueDate);
+                                    
+                                    return (
+                                        <tr key={assignment._id} className="align-middle">
+                                            {/* Assignment Title Cell */}
+                                            <td style={{ padding: '16px' }}>
+                                                <div className="d-flex align-items-center">
                                                     <div 
-                                                        className="card h-100 border-0 shadow-sm hover-shadow"
-                                                        style={{ 
-                                                            transition: 'all 0.3s ease',
-                                                            backgroundColor: '#f8faff'
+                                                        className="d-flex justify-content-center align-items-center me-3"
+                                                        style={{
+                                                            width: '40px',
+                                                            height: '40px',
+                                                            borderRadius: '8px',
+                                                            backgroundColor: `${assignmentColor}20`,
+                                                            color: assignmentColor
                                                         }}
                                                     >
-                                                        {/* Colored Header Section */}
-                                                        <div className="card-header border-0 p-4" style={{
-                                                            background: getAssignmentColor(assignment.title[0]),
-                                                            borderRadius: '12px 12px 0 0'
-                                                        }}>
-                                                            <div className="d-flex justify-content-between align-items-start">
-                                                                <div className="d-flex flex-column text-white">
-                                                                    <h5 className="mb-2 fw-bold">{assignment.title}</h5>
-                                                                    <div className="d-flex gap-2">
-                                                                        <div className="badge bg-white bg-opacity-25">
-                                                                            {assignment.maxMarks} Points
-                                                                        </div>
-                                                                        <div className="badge bg-white text-dark">
-                                                                            {assignment.submissions?.length || 0} Submissions
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div className="d-flex gap-2">
-                                                                    <button 
-                                                                        className="btn btn-sm btn-light d-flex align-items-center gap-1"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setEditingAssignment(assignment);
-                                                                            setShowEditAssignmentModal(true);
-                                                                        }}
-                                                                        style={{
-                                                                            fontSize: '0.875rem',
-                                                                            padding: '0.25rem 0.75rem'
-                                                                        }}
-                                                                    >
-                                                                        <i className="bi bi-pencil"></i>
-                                                                        <span>Edit</span>
-                                                                    </button>
-                                                                    <button 
-                                                                        className="btn btn-sm btn-light d-flex align-items-center gap-1"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            if (window.confirm('Are you sure you want to delete this assignment?')) {
-                                                                                handleDeleteAssignment(assignment._id);
-                                                                            }
-                                                                        }}
-                                                                        style={{
-                                                                            fontSize: '0.875rem',
-                                                                            padding: '0.25rem 0.75rem'
-                                                                        }}
-                                                                    >
-                                                                        <i className="bi bi-trash"></i>
-                                                                        <span>Delete</span>
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Content Section */}
-                                                        <div className="card-body p-4">
-                                                            {/* Description */}
-                                                            <p className="text-muted mb-3" style={{ fontSize: '0.95rem' }}>
-                                                                {assignment.description || 'No description provided'}
-                                                            </p>
-
-                                                            {/* Due Date */}
-                                                            <div className="d-flex align-items-center mb-3">
-                                                                <i className="bi bi-calendar3 me-2 text-muted"></i>
-                                                                <div>
-                                                                    <div className="text-muted">Due: {formatDate(assignment.dueDate)}</div>
-                                                                    <small className={getTimeRemainingClass(assignment.dueDate)}>
-                                                                        {getFormattedTimeRemaining(assignment.dueDate)}
-                                                                    </small>
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Reference Document */}
-                                                            {assignment.assignmentFile && (
-                                                                <div className="mb-3">
-                                                                    <a
-                                                                        href={getBaseUrl(`${assignment.assignmentFile}`)}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        className="btn btn-sm btn-light d-inline-flex align-items-center gap-2"
-                                                                    >
-                                                                        <i className="bi bi-file-earmark-text"></i>
-                                                                        Reference Document
-                                                                    </a>
-                                                                </div>
-                                                            )}
-
-                                                            {/* View Submissions Button */}
-                                                            <button
-                                                                onClick={() => {
-                                                                    setSelectedAssignment(assignment);
-                                                                    setShowSubmissions(true);
-                                                                }}
-                                                                className="btn btn-primary w-100"
-                                                                style={{
-                                                                    background: '#6366f1',
-                                                                    borderColor: '#6366f1'
-                                                                }}
-                                                            >
-                                                                <i className="bi bi-eye me-2"></i>
-                                                                View Submissions
-                                                            </button>
-                                                        </div>
+                                                        <i className="fas fa-file-alt"></i>
+                                                    </div>
+                                                    <div>
+                                                        <h6 className="mb-0 fw-bold" style={{ color: '#111827' }}>
+                                                            {assignment.title}
+                                                        </h6>
+                                                        <small className="text-muted d-block text-truncate" style={{ maxWidth: '250px' }}>
+                                                            {assignment.description.substring(0, 60)}
+                                                            {assignment.description.length > 60 ? '...' : ''}
+                                                        </small>
                                                     </div>
                                                 </div>
-                                            ))}
+                                            </td>
+                                            
+                                            {/* Due Date Cell */}
+                                            <td style={{ padding: '16px' }}>
+                                                <div className={`d-flex flex-column ${timeClass}`}>
+                                                    <span style={{ fontSize: '0.875rem', fontWeight: '500' }}>
+                                                        {new Date(assignment.dueDate).toLocaleDateString()}
+                                                    </span>
+                                                    <small className={`${timeClass}`}>
+                                                        {timeRemaining}
+                                                    </small>
+                                                </div>
+                                            </td>
+                                            
+                                            {/* Status Cell */}
+                                            <td style={{ padding: '16px' }}>
+                                                {new Date(assignment.dueDate) < new Date() ? (
+                                                    <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                        <i className="fas fa-clock me-1"></i> Closed
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                        <i className="fas fa-check-circle me-1"></i> Active
+                                                    </span>
+                                                )}
+                                            </td>
+                                            
+                                            {/* Submissions Cell */}
+                                            <td style={{ padding: '16px' }}>
+                                                <div className="d-flex align-items-center">
+                                                    <div className="progress flex-grow-1 me-2" style={{ height: '6px' }}>
+                                                        <div 
+                                                            className="progress-bar" 
+                                                            role="progressbar"
+                                                            style={{
+                                                                width: `${submissionRate}%`,
+                                                                backgroundColor: submissionRate >= 70 ? '#10b981' : 
+                                                                                 submissionRate >= 30 ? '#f59e0b' : '#ef4444'
+                                                            }}
+                                                        ></div>
+                                                    </div>
+                                                    <span style={{ fontSize: '0.875rem', fontWeight: '500', whiteSpace: 'nowrap' }}>
+                                                        {submissionCount} / {totalStudents}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            
+                                            {/* Actions Cell */}
+                                            <td style={{ padding: '16px' }}>
+                                                <div className="d-flex" style={{ gap: '8px' }}>
+                                                    <button 
+                                                        className="btn btn-sm btn-outline-primary"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setShowSubmissions(true);
+                                                            setSelectedAssignment(assignment);
+                                                            setActiveView('submissions'); // Change the view to submissions
+                                                        }}
+                                                        title="View submissions"
+                                                    >
+                                                        <i className="fas fa-eye me-1"></i> Submissions
+                                                    </button>
+                                                    <button 
+                                                        className="btn btn-sm btn-outline-secondary"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditingAssignment(assignment);
+                                                            setShowEditAssignmentModal(true);
+                                                        }}
+                                                        title="Edit assignment"
+                                                    >
+                                                        <i className="fas fa-edit"></i>
+                                                    </button>
+                                                    <button 
+                                                        className="btn btn-sm btn-outline-danger"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDeleteAssignment(assignment._id);
+                                                        }}
+                                                        title="Delete assignment"
+                                                    >
+                                                        <i className="fas fa-trash-alt"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="text-center py-5">
+                        <div style={{ color: '#9ca3af', marginBottom: '16px' }}>
+                            <i className="fas fa-clipboard fa-3x"></i>
+                        </div>
+                        <h5 style={{ color: '#4b5563', fontWeight: '500' }}>No assignments yet</h5>
+                        <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
+                            Create your first assignment for this classroom to get started.
+                        </p>
+                        <button 
+                            className="btn btn-primary"
+                            onClick={() => setShowAssignmentModal(true)}
+                        >
+                            <i className="fas fa-plus me-2"></i> Create Assignment
+                        </button>
+                    </div>
+                )}
+            </div>
+        </div>
+    </div>
+)}
+                                {/* Submissions View */}
+                                {activeView === 'submissions' && showSubmissions && selectedAssignment && (
+                                    <div className="card border-0 shadow-sm mt-4">
+                                        <div className="card-header bg-white p-0">
+                                            <div className="submission-header">
+    {/* Top Section */}
+    <div className="submission-header-top">
+        <button 
+            className="back-btn"
+            onClick={() => {
+                setActiveView('assignments');
+                setShowSubmissions(false);
+            }}
+        >
+            <i className="fas fa-arrow-left"></i>
+        </button>
+        <div className="submission-title">
+            <i className="fas fa-file-alt" 
+               style={{ color: getAssignmentColor(selectedAssignment.title.charAt(0).toUpperCase()) }}
+            />
+            <h5 className="mb-0">{selectedAssignment.title}</h5>
+        </div>
+    </div>
+
+    {/* Bottom Section */}
+    <div className="submission-header-bottom">
+        <div className="submission-count">
+            <i className="fas fa-file-alt"></i>
+            <span>{selectedAssignment.submissions?.length || 0} Total Submissions</span>
+        </div>
+        
+        <div className="submission-actions">
+            <button 
+                className="action-btn export-btn"
+                onClick={exportSubmissionsToExcel}
+                disabled={loading}
+            >
+                <i className="fas fa-file-excel"></i>
+                <span>Export</span>
+            </button>
+            
+            {selectedAssignment.submissions?.some(sub => sub.grade === undefined || sub.grade === null) && (
+                <button 
+                    className="action-btn grade-btn"
+                    onClick={handleBatchAutoGrade}
+                    disabled={loading}
+                >
+                    {loading ? (
+                        <>
+                            <span className="spinner-border spinner-border-sm" />
+                            <span>Grading</span>
+                        </>
+                    ) : (
+                        <>
+                            <i className="fas fa-robot"></i>
+                            <span>Auto Grade</span>
+                        </>
+                    )}
+                </button>
+            )}
+        </div>
+    </div>
+</div>
+
                                         </div>
-                                    )
-                                ) : (
-                                    <div className="bg-white rounded-lg p-4">
-                                        <div className="mb-4">
-                                            <h5 className="text-lg font-medium text-gray-900">Enrolled Students</h5>
-                                            <p className="text-sm text-gray-500">
-                                                Total Students: {selectedClassroom.students?.length || 0}
-                                            </p>
-                                        </div>
-                                        
-                                        {selectedClassroom.students?.length > 0 ? (
-                                            <div className="overflow-hidden shadow ring-1 ring-black ring-opacity-5 rounded-lg">
-                                                <table className="table table-hover">
-                                                    <thead className="bg-gray-50">
-                                                        <tr>
-                                                            <th scope="col" style={{ width: '50px' }}></th>
-                                                            <th scope="col">Name</th>
-                                                            <th scope="col">Email</th>
-                                                            <th scope="col">Actions</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {selectedClassroom.students.map((student) => (
-                                                            <tr key={student._id}>
-                                                                <td>
-                                                                    <div style={{
-                                                                        width: '35px',
-                                                                        height: '35px',
-                                                                        borderRadius: '50%',
-                                                                        backgroundColor: '#6366f1',
-                                                                        color: 'white',
-                                                                        display: 'flex',
-                                                                        alignItems: 'center',
-                                                                        justifyContent: 'center',
-                                                                        fontSize: '0.875rem',
-                                                                        fontWeight: '500'
-                                                                    }}>
-                                                                        {getInitials(student.name)}
-                                                                    </div>
-                                                                </td>
-                                                                <td className="align-middle">{student.name}</td>
-                                                                <td className="align-middle">{student.email}</td>
-                                                                <td className="align-middle">
-                                                                    <button
-                                                                        onClick={() => handleRemoveStudent(selectedClassroom._id, student._id)}
-                                                                        className="btn btn-link text-danger p-0"
-                                                                    >
-                                                                        Remove
-                                                                    </button>
-                                                                </td>
+                                        <div className="card-body p-0">
+                                            {selectedAssignment.submissions && selectedAssignment.submissions.length > 0 ? (
+                                                <div className="table-responsive">
+                                                    <table className="table table-hover assignment-table mb-0">
+                                                        <thead style={{ backgroundColor: '#f9fafb' }}>
+                                                            <tr>
+                                                                <th style={{ width: '25%', padding: '12px 16px' }}>Student</th>
+                                                                <th style={{ width: '15%', padding: '12px 16px' }}>Submitted On</th>
+                                                                <th style={{ width: '10%', padding: '12px 16px' }}>Status</th>
+                                                                <th style={{ width: '12%', padding: '12px 16px' }}>Grade</th>
+                                                                <th style={{ width: '15%', padding: '12px 16px' }}>Feedback</th>
+                                                                <th style={{ width: '23%', padding: '12px 16px' }}>Actions</th>
                                                             </tr>
-                                                        ))}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-4 text-gray-500">
-                                                No students enrolled yet
-                                            </div>
-                                        )}
+                                                        </thead>
+                                                        <tbody>
+                                                            {selectedAssignment.submissions.map(submission => {
+                                                                // Find student info - handle different data structures
+                                                                const student = submission.student || 
+                                                                    selectedClassroom.students?.find(s => s._id === submission.studentId) || 
+                                                                    { name: 'Unknown Student' };
+                                                                
+                                                                // Determine submission status and class
+                                                                const isLate = new Date(submission.submittedAt) > new Date(selectedAssignment.dueDate);
+                                                                const statusClass = submission.grade !== undefined 
+                                                                    ? 'bg-success-subtle text-success border-success-subtle'
+                                                                    : isLate 
+                                                                        ? 'bg-warning-subtle text-warning border-warning-subtle'
+                                                                        : 'bg-info-subtle text-info border-info-subtle';
+                                                                
+                                                                const statusText = submission.grade !== undefined 
+                                                                    ? 'Graded'
+                                                                    : isLate 
+                                                                        ? 'Late'
+                                                                        : 'Submitted';
+                                                                
+                                                                const statusIcon = submission.grade !== undefined 
+                                                                    ? 'fa-check-circle'
+                                                                    : isLate 
+                                                                        ? 'fa-clock'
+                                                                        : 'fa-paper-plane';
+                                                                
+                                                                return (
+                                                                    <tr key={submission._id} className="align-middle">
+                                                                        {/* Student Name Cell */}
+                                                                        <td style={{ padding: '16px' }}>
+                                                                            <div className="d-flex align-items-center">
+                                                                                <div 
+                                                                                    className="d-flex justify-content-center align-items-center me-3"
+                                                                                    style={{
+                                                                                        width: '40px',
+                                                                                        height: '40px',
+                                                                                        borderRadius: '50%',
+                                                                                        backgroundColor: '#f3f4f6',
+                                                                                        color: '#4b5563',
+                                                                                        fontWeight: '600'
+                                                                                    }}
+                                                                                >
+                                                                                    {getInitials(student.name)}
+                                                                                </div>
+                                                                                <div>
+                                                                                    <h6 className="mb-0 fw-bold" style={{ color: '#111827' }}>
+                                                                                        {student.name}
+                                                                                    </h6>
+                                                                                    <small className="text-muted d-block">
+                                                                                        {student.email || ''}
+                                                                                    </small>
+                                                                                </div>
+                                                                            </div>
+                                                                        </td>
+                                                                        
+                                                                        {/* Submission Date Cell */}
+                                                                        <td style={{ padding: '16px' }}>
+                                                                            <div>
+                                                                                <span style={{ fontSize: '0.875rem' }}>
+                                                                                    {new Date(submission.submittedAt).toLocaleDateString()}
+                                                                                </span>
+                                                                                <small className="text-muted d-block">
+                                                                                    {new Date(submission.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                                </small>
+                                                                            </div>
+                                                                        </td>
+                                                                        
+                                                                        {/* Status Cell */}
+                                                                        <td style={{ padding: '16px' }}>
+                                                                            <span className={`badge ${statusClass} px-2 py-1`}>
+                                                                                <i className={`fas ${statusIcon} me-1`}></i> {statusText}
+                                                                            </span>
+                                                                        </td>
+                                                                        
+                                                                        {/* Grade Cell */}
+                                                                        <td style={{ padding: '16px' }}>
+                                                                            {submission.grade !== undefined ? (
+                                                                                <div className="d-flex align-items-center">
+                                                                                    <span className="fw-bold me-1">{submission.grade}</span>
+                                                                                    <span className="text-muted">/ {selectedAssignment.maxMarks}</span>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span className="text-muted">Not graded</span>
+                                                                            )}
+                                                                        </td>
+                                                                        
+                                                                        {/* NEW: Feedback Column */}
+                                                                        <td style={{ padding: '16px' }}>
+                                                                            {submission.feedback ? (
+                                                                                <button 
+                                                                                    className="btn btn-sm btn-outline-info" 
+                                                                                    onClick={() => {
+                                                                                        // Show feedback in a modal popup
+                                                                                        setSelectedSubmission(submission);
+                                                                                        document.getElementById(`feedback-popup-${submission._id}`).style.display = 'block';
+                                                                                    }}
+                                                                                >
+                                                                                    <i className="fas fa-comment-dots me-2"></i>
+                                                                                    View Feedback
+                                                                                </button>
+                                                                            ) : (
+                                                                                <span className="text-muted fst-italic">No feedback</span>
+                                                                            )}
+                                                                            
+                                                                            {/* Feedback Popup Modal - Hidden by default */}
+                                                                            <div 
+                                                                                id={`feedback-popup-${submission._id}`}
+                                                                                className="feedback-popup" 
+                                                                                style={{
+                                                                                    display: 'none',
+                                                                                    position: 'fixed',
+                                                                                    top: '50%',
+                                                                                    left: '50%',
+                                                                                    transform: 'translate(-50%, -50%)',
+                                                                                    backgroundColor: '#fff',
+                                                                                    borderRadius: '12px',
+                                                                                    padding: '25px',
+                                                                                    boxShadow: '0 5px 20px rgba(0, 0, 0, 0.2)',
+                                                                                    zIndex: 1000,
+                                                                                    maxWidth: '500px',
+                                                                                    width: '90%'
+                                                                                }}
+                                                                            >
+                                                                                <div className="d-flex justify-content-between align-items-start mb-4">
+                                                                                    <h5 className="mb-0 d-flex align-items-center">
+                                                                                        <i className="fas fa-comment-alt me-2" style={{ color: '#6366f1' }}></i>
+                                                                                        Feedback for {student.name}
+                                                                                    </h5>
+                                                                                    <button 
+                                                                                        className="btn btn-sm btn-light rounded-circle" 
+                                                                                        style={{ width: '30px', height: '30px', padding: '0' }}
+                                                                                        onClick={() => document.getElementById(`feedback-popup-${submission._id}`).style.display = 'none'}
+                                                                                    >
+                                                                                        <i className="fas fa-times"></i>
+                                                                                    </button>
+                                                                                </div>
+                                                                                <div style={{ 
+                                                                                    backgroundColor: '#f9fafb', 
+                                                                                    borderRadius: '8px',
+                                                                                    padding: '16px',
+                                                                                    border: '1px solid #e5e7eb'
+                                                                                }}>
+                                                                                    <div className="mb-3 d-flex align-items-center">
+                                                                                        <div 
+                                                                                            style={{
+                                                                                                width: '40px',
+                                                                                                height: '40px',
+                                                                                                borderRadius: '50%',
+                                                                                                backgroundColor: '#6366f1',
+                                                                                                color: '#fff',
+                                                                                                display: 'flex',
+                                                                                                alignItems: 'center',
+                                                                                                justifyContent: 'center',
+                                                                                                marginRight: '12px'
+                                                                                            }}
+                                                                                        >
+                                                                                            <i className="fas fa-user-tie"></i>
+                                                                                        </div>
+                                                                                        <div>
+                                                                                            <div className="text-muted" style={{ fontSize: '0.8rem' }}>From Faculty</div>
+                                                                                            <div className="fw-bold">{userName}</div>
+                                                                                        </div>
+                                                                                        <div className="ms-auto">
+                                                                                            <span className="badge bg-primary">
+                                                                                                Grade: {submission.grade}/{selectedAssignment.maxMarks}
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div style={{ 
+                                                                                        backgroundColor: '#fff',
+                                                                                        borderRadius: '8px',
+                                                                                        padding: '16px',
+                                                                                        border: '1px solid #e5e7eb',
+                                                                                        minHeight: '100px',
+                                                                                        whiteSpace: 'pre-wrap'
+                                                                                    }}>
+                                                                                        {submission.feedback}
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div className="mt-4 d-flex justify-content-end">
+                                                                                    <button 
+                                                                                        className="btn btn-primary"
+                                                                                        onClick={() => {
+                                                                                            // Hide feedback popup
+                                                                                            document.getElementById(`feedback-popup-${submission._id}`).style.display = 'none';
+                                                                                            
+                                                                                            // Show grade modal for editing
+                                                                                            setGradeModalData({
+                                                                                                grade: submission.grade || '',
+                                                                                                feedback: submission.feedback || ''
+                                                                                            });
+                                                                                            setShowGradeModal(true);
+                                                                                        }}
+                                                                                    >
+                                                                                        <i className="fas fa-edit me-2"></i>
+                                                                                        Edit Feedback
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                            
+                                                                            {/* Overlay for popup */}
+                                                                            <div 
+                                                                                id={`feedback-overlay-${submission._id}`}
+                                                                                className="feedback-overlay" 
+                                                                                style={{
+                                                                                    display: 'none',
+                                                                                    position: 'fixed',
+                                                                                    top: 0,
+                                                                                    left: 0,
+                                                                                    right: 0,
+                                                                                    bottom: 0,
+                                                                                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                                                                    zIndex: 999
+                                                                                }}
+                                                                                onClick={() => {
+                                                                                    document.getElementById(`feedback-popup-${submission._id}`).style.display = 'none';
+                                                                                    document.getElementById(`feedback-overlay-${submission._id}`).style.display = 'none';
+                                                                                }}
+                                                                            ></div>
+                                                                        </td>
+                                                                        
+                                                                        {/* Actions Column in Submissions Table */}
+                                                                        <td style={{ padding: '16px' }}>
+                                                                            <div className="submission-actions-container">
+                                                                                {/* View submission button */}
+                                                                                {submission.submissionUrl && submission.submissionUrl.trim() !== '' && (
+                                                                                    <a 
+                                                                                        href={submission.submissionUrl} 
+                                                                                        target="_blank" 
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="btn btn-sm btn-outline-secondary submission-action-btn"
+                                                                                    >
+                                                                                        <i className="fas fa-external-link-alt"></i>
+                                                                                        <span>View</span>
+                                                                                    </a>
+                                                                                )}
+                                                                                
+                                                                                {/* AI Grade button */}
+                                                                                {(submission.grade === null || submission.grade === undefined) && (
+                                                                                    <button
+                                                                                        className="btn btn-sm btn-outline-info submission-action-btn"
+                                                                                        onClick={() => handleAutoGrade(selectedAssignment._id, submission._id)}
+                                                                                        disabled={autoGradingStatus[submission._id] === 'processing'}
+                                                                                    >
+                                                                                        <i className="fas fa-robot"></i>
+                                                                                        <span>AI Grade</span>
+                                                                                    </button>
+                                                                                )}
+                                                                                
+                                                                                {/* Manual Grade button */}
+                                                                                <button 
+                                                                                    className="btn btn-sm btn-outline-primary submission-action-btn"
+                                                                                    onClick={() => {
+                                                                                        setSelectedSubmission(submission);
+                                                                                        setGradeModalData({
+                                                                                            grade: submission.grade || '',
+                                                                                            feedback: submission.feedback || ''
+                                                                                        });
+                                                                                        setShowGradeModal(true);
+                                                                                    }}
+                                                                                >
+                                                                                    <i className={submission.grade !== undefined ? "fas fa-edit" : "fas fa-check"}></i>
+                                                                                    <span>{submission.grade !== undefined ? 'Update' : 'Grade'}</span>
+                                                                                </button>
+                                                                            </div>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            ) : (
+                                                <div className="text-center py-5">
+                                                    <div style={{ color: '#9ca3af', marginBottom: '16px' }}>
+                                                        <i className="fas fa-file-upload fa-3x"></i>
+                                                    </div>
+                                                    <h5 style={{ color: '#4b5563', fontWeight: '500' }}>No submissions yet</h5>
+                                                    <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto' }}>
+                                                        Students haven't submitted any work for this assignment yet.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 )}
+                                {activeView === 'students' && (
+    <div className="students-section mt-4">
+        <div className="card border-0 shadow-sm">
+            <div className="card-header section-header">
+  <div className="section-title">
+    <i className="fas fa-users"></i>
+    <h5 className="mb-0">Students</h5>
+  </div>
+  <div className="section-actions">
+    <button
+      className="btn btn-primary btn-sm d-flex align-items-center gap-2"
+      onClick={() => {
+        setFormData({
+          ...selectedClassroom,
+          studentEmails: '',
+          isAddingStudentsOnly: true
+        });
+        setShowEditModal(true);
+      }}
+    >
+      <i className="fas fa-user-plus"></i>
+      <span>Students</span>
+    </button>
+  </div>
+</div>
+
+            <div className="card-body p-0">
+                {selectedClassroom.students?.length > 0 ? (
+                    <div className="table-responsive">
+                        <table className="table table-hover mb-0">
+                            <thead style={{ backgroundColor: '#f9fafb' }}>
+                                <tr>
+                                    <th style={{ width: '5%', padding: '16px' }}>#</th>
+                                    <th style={{ width: '10%', padding: '16px' }}>Avatar</th>
+                                    <th style={{ width: '20%', padding: '16px' }}>Student</th>
+                                    <th style={{ width: '20%', padding: '16px' }}>Email</th>
+                                    <th style={{ width: '15%', padding: '16px' }}>Submissions</th>
+                                    <th style={{ width: '15%', padding: '16px' }}>Average Grade</th>
+                                    <th style={{ width: '15%', padding: '16px' }}>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {selectedClassroom.students.map((student, index) => {
+    // Calculate student stats
+    let submissionCount = 0;
+    let completedAssignments = 0;
+    let totalGrade = 0;
+    
+    // Loop through all assignments to find this student's submissions
+    assignments.forEach(assignment => {
+        const studentSubmission = assignment.submissions?.find(
+            sub => 
+                (sub.studentId === student._id) || 
+                (sub.student && sub.student._id === student._id) ||
+                (sub.student && sub.student.email === student.email)
+        );
+        
+        if (studentSubmission) {
+            submissionCount++;
+            if (studentSubmission.grade !== undefined && studentSubmission.grade !== null) {
+                completedAssignments++;
+                totalGrade += parseInt(studentSubmission.grade);
+            }
+        }
+    });
+    
+    // Calculate average grade
+    const averageGrade = completedAssignments > 0 
+        ? (totalGrade / completedAssignments).toFixed(1) 
+        : 'N/A';
+    
+    // Calculate progress percentage
+    const progressPercentage = assignments.length > 0 
+        ? Math.round((submissionCount / assignments.length) * 100) 
+        : 0;
+    
+    // Determine progress color
+    const progressColor = 
+        progressPercentage >= 75 ? '#10b981' : 
+        progressPercentage >= 50 ? '#0ea5e9' : 
+        progressPercentage >= 25 ? '#f59e0b' : 
+        '#ef4444';
+
+                                    return (
+                                        <tr key={student._id} className="align-middle">
+                                            <td style={{ padding: '16px' }}>{index + 1}</td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div 
+                                                    className="d-flex justify-content-center align-items-center"
+                                                    style={{
+                                                        width: '45px',
+                                                        height: '45px',
+                                                        borderRadius: '50%',
+                                                        backgroundColor: getAssignmentColor(student.name.charAt(0).toUpperCase()),
+                                                        color: '#fff',
+                                                        fontWeight: '600',
+                                                        fontSize: '1rem'
+                                                    }}
+                                                >
+                                                    {getInitials(student.name)}
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div>
+                                                    <h6 className="mb-0 fw-bold" style={{ color: '#111827' }}>
+                                                        {student.name}
+                                                    </h6>
+                                                    <small className="text-muted d-block">
+                                                        Joined {formatDate(student.createdAt || new Date())}
+                                                    </small>
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div className="d-flex align-items-center">
+                                                    <i className="fas fa-envelope text-muted me-2"></i>
+                                                    <span style={{ fontSize: '0.9rem' }}>{student.email}</span>
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div>
+                                                    <div className="d-flex justify-content-between mb-1">
+                                                        <small>{submissionCount} / {assignments.length}</small>
+                                                        <small className="fw-bold">{progressPercentage}%</small>
+                                                    </div>
+                                                    <div className="progress" style={{ height: '6px' }}>
+                                                        <div 
+                                                            className="progress-bar" 
+                                                            style={{ 
+                                                                width: `${progressPercentage}%`,
+                                                                backgroundColor: progressColor 
+                                                            }}
+                                                            role="progressbar" 
+                                                            aria-valuenow={progressPercentage}
+                                                            aria-valuemin="0" 
+                                                            aria-valuemax="100"
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                {averageGrade !== 'N/A' ? (
+                                                    <div className="d-flex align-items-center">
+                                                        <div 
+                                                            className="me-2 d-flex justify-content-center align-items-center" 
+                                                            style={{
+                                                                width: '38px',
+                                                                height: '38px',
+                                                                borderRadius: '50%',
+                                                                backgroundColor: parseFloat(averageGrade) >= 70 ? '#d1fae5' : 
+                                                                                parseFloat(averageGrade) >= 50 ? '#fef3c7' : 
+                                                                                '#fee2e2',
+                                                                color: parseFloat(averageGrade) >= 70 ? '#10b981' : 
+                                                                        parseFloat(averageGrade) >= 50 ? '#f59e0b' : 
+                                                                        '#ef4444'
+                                                            }}
+                                                        >
+                                                            <span className="fw-bold">{averageGrade}</span>
+                                                        </div>
+                                                        <div className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                                            {completedAssignments} graded<br />assignments
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-muted">No grades yet</span>
+                                                )}
+                                            </td>
+                                            <td style={{ padding: '16px' }}>
+                                                <div className="d-flex" style={{ gap: '8px' }}>
+                                                    <button
+                                                        className="btn btn-sm btn-outline-primary"
+                                                        onClick={() => {
+                                                            // Filter assignments for this student
+                                                            const studentSubmissions = assignments.map(assignment => {
+                                                                const submission = assignment.submissions?.find(
+                                                                    sub => sub.studentId === student._id
+                                                                );
+                                                                return {
+                                                                    assignment,
+                                                                    submission
+                                                                };
+                                                            });
+                                                            
+                                                            // Set state for showing student details/progress
+                                                            // You'll need to add this functionality
+                                                            alert(`Student progress view for ${student.name} coming soon!`);
+                                                        }}
+                                                        title="View student progress"
+                                                    >
+                                                        <i className="fas fa-chart-line"></i>
+                                                    </button>
+                                                    <button
+                                                        className="btn btn-sm btn-outline-danger"
+                                                        onClick={() => handleRemoveStudent(selectedClassroom._id, student._id)}
+                                                        title="Remove student"
+                                                    >
+                                                        <i className="fas fa-user-minus"></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    </div>
+                ) : (
+                    <div className="text-center py-5">
+                        <div style={{ color: '#9ca3af', marginBottom: '16px' }}>
+                            <i className="fas fa-user-graduate fa-3x"></i>
+                        </div>
+                        <h5 style={{ color: '#4b5563', fontWeight: '500' }}>No students enrolled yet</h5>
+                        <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto 16px' }}>
+                            Add students to your classroom by inviting them via email or sharing the class code.
+                        </p>
+                        <div className="d-flex justify-content-center">
+                            <button 
+                                className="btn btn-primary me-2"
+                                onClick={() => {
+                                    setFormData({
+                                        ...formData,
+                                        studentEmails: ''
+                                    });
+                                    setShowEditModal(true);
+                                }}
+                            >
+                                <i className="fas fa-user-plus me-2"></i> Add Students
+                            </button>
+                            <button 
+                                className="btn btn-outline-secondary"
+                                onClick={() => {
+                                    // Copy class code to clipboard
+                                    navigator.clipboard.writeText(selectedClassroom.roomCode);
+                                    setSuccess('Class code copied to clipboard!');
+                                }}
+                            >
+                                <i className="fas fa-copy me-2"></i> Copy Class Code
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    </div>
+)}
                             </div>
                         </div>
                     )}

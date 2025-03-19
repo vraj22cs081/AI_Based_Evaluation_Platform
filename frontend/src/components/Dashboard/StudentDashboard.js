@@ -11,7 +11,7 @@ import JoinClassroomModal from '../Classroom/JoinClassroomModal';
 import Header from '../header/Header';
 import { useUpdate } from '../../context/UpdateContext';
 import { getApiUrl, getBaseUrl } from '../../config/api.config';
-
+import './StudentDashboard.css';
 
 const StudentDashboard = () => {
     const [enrolledClassrooms, setEnrolledClassrooms] = useState([]);
@@ -31,6 +31,10 @@ const StudentDashboard = () => {
 
     // Add state for assignment counts
     const [assignmentCounts, setAssignmentCounts] = useState({});
+
+    // Add these state variables at the top with other states
+    const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+    const [selectedFeedback, setSelectedFeedback] = useState(null);
 
     // Fetch assignment counts for each classroom
     const fetchAssignmentCount = async (classroomId) => {
@@ -161,35 +165,9 @@ const StudentDashboard = () => {
         }
     };
 
-    const handleSubmitAssignment = async (fileUrl) => {
-        try {
-            const sessionId = sessionStorage.getItem('sessionId');
-            const token = sessionStorage.getItem(`token_${sessionId}`);
-
-            const response = await axios.post(
-                getApiUrl(`/student/assignments/${selectedAssignment._id}/submit`),
-                { submissionFile: fileUrl },
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'X-Session-ID': sessionId
-                    }
-                }
-            );
-
-            if (response.data.success) {
-                setSuccess('Assignment submitted successfully');
-                setShowSubmissionModal(false);
-                setSelectedAssignment(null);
-                setSearchParams({});
-                triggerUpdate();
-                // Reset selected classroom and redirect
-                setSelectedClassroom(null);
-                navigate('/student/dashboard');
-            }
-        } catch (error) {
-            setError(error.response?.data?.message || 'Failed to submit assignment');
-        }
+    const handleSubmitAssignment = (assignment) => {
+        setSelectedAssignment(assignment);
+        setShowSubmissionModal(true);
     };
 
     const handleLogout = async () => {
@@ -230,11 +208,22 @@ const StudentDashboard = () => {
 
     // Add this function with your other handlers
     const handleViewSubmission = (assignment) => {
-        // For now, just show the submission modal with the submitted assignment
-        setSelectedAssignment(assignment);
-        setShowSubmissionView(true);
-        // Add assignment ID to URL
-        setSearchParams({ modal: 'submit', assignmentId: assignment._id });
+        if (assignment.submission?.submissionFile) {
+            window.open(getBaseUrl(assignment.submission.submissionFile), '_blank');
+        } else {
+            setError('No submission file found');
+        }
+    };
+
+    // Add this handler function
+    const handleShowFeedback = (assignment) => {
+        setSelectedFeedback({
+            title: assignment.title,
+            feedback: assignment.submission.feedback,
+            grade: assignment.submission.grade,
+            maxMarks: assignment.maxMarks
+        });
+        setShowFeedbackModal(true);
     };
 
     // Add this useEffect to handle URL parameters
@@ -252,13 +241,106 @@ const StudentDashboard = () => {
         }
     }, [searchParams, assignments]);
 
+    // Add this effect to fetch assignment counts when classrooms load
+    useEffect(() => {
+        const fetchAllAssignmentCounts = async () => {
+            try {
+                const sessionId = sessionStorage.getItem('sessionId');
+                const token = sessionStorage.getItem(`token_${sessionId}`);
+
+                // Fetch counts for all enrolled classrooms
+                const countPromises = enrolledClassrooms.map(classroom => 
+                    axios.get(
+                        getApiUrl(`/student/classrooms/${classroom._id}/assignments`), // Updated endpoint
+                        {
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'X-Session-ID': sessionId
+                            }
+                        }
+                    )
+                );
+
+                const responses = await Promise.all(countPromises);
+                const newCounts = {};
+                
+                enrolledClassrooms.forEach((classroom, index) => {
+                    // Get the length of assignments array from response
+                    newCounts[classroom._id] = responses[index].data.assignments?.length || 0;
+                });
+
+                setAssignmentCounts(newCounts);
+            } catch (error) {
+                console.error('Error fetching assignment counts:', error);
+            }
+        };
+
+        if (enrolledClassrooms.length > 0) {
+            fetchAllAssignmentCounts();
+        }
+    }, [enrolledClassrooms]);
+
     // Modify your modal close handler
     const handleCloseModal = () => {
-        setShowSubmissionView(false);
+        setShowSubmissionModal(false);
         setSelectedAssignment(null);
-        // Remove parameters from URL
         setSearchParams({});
     };
+
+    // Replace the problematic useEffect
+    useEffect(() => {
+        const fetchAssignmentData = async () => {
+            try {
+                const sessionId = sessionStorage.getItem('sessionId');
+                const token = sessionStorage.getItem(`token_${sessionId}`);
+
+                if (selectedClassroom) {
+                    const response = await axios.get(
+                        getApiUrl(`/student/classrooms/${selectedClassroom._id}/assignments`),
+                        {
+                            headers: {
+                                Authorization: `Bearer ${token}`,
+                                'X-Session-ID': sessionId
+                            }
+                        }
+                    );
+
+                    console.log("Assignments data:", response.data);
+                    if (response.data.assignments) {
+                        response.data.assignments.forEach(assignment => {
+                            console.log("Assignment file:", assignment.assignmentFile);
+                        });
+                        setAssignments(response.data.assignments);
+                    }
+                }
+            } catch (error) {
+                console.error("Error fetching assignments:", error);
+                setError('Failed to fetch assignments');
+            }
+        };
+
+        fetchAssignmentData();
+    }, [selectedClassroom]);
+
+    // Add this effect to validate assignment files
+    useEffect(() => {
+        const validateFiles = async () => {
+            const validatedAssignments = await Promise.all(
+                assignments.map(async (assignment) => {
+                    if (assignment.assignmentFile) {
+                        const exists = await checkFileExists(assignment.assignmentFile);
+                        console.log(`File ${assignment.assignmentFile} exists:`, exists);
+                    }
+                    return assignment;
+                })
+            );
+            console.log("Validated assignments:", validatedAssignments);
+        };
+
+        if (assignments.length > 0) {
+            validateFiles();
+        }
+    }, [assignments]);
 
     if (loading) {
         return <LoadingSpinner />;
@@ -280,67 +362,263 @@ const StudentDashboard = () => {
                     {success && <Notification type="success" message={success} onClose={() => setSuccess('')} />}
 
                     {/* Welcome Section */}
-                    <div className="card shadow-sm mb-4">
-                        <div className="card-body d-flex justify-content-between align-items-center">
-                            <div>
-                                <h2 className="mb-1">Welcome back, {userName}</h2>
-                                <p className="text-muted mb-0">{enrolledClassrooms.length} Active Classrooms</p>
-                            </div>
-                            <button
-                                onClick={() => setShowJoinModal(true)}
-                                className="btn btn-primary px-4"
-                                style={{
-                                    background: '#6366f1',
-                                    borderColor: '#6366f1',
-                                    borderRadius: '8px'
-                                }}
-                            >
-                                + Join Classroom
-                            </button>
-                        </div>
-                    </div>
+                    <div 
+    className="card mb-4"
+    style={{
+        borderRadius: '16px',
+        border: 'none',
+        background: 'linear-gradient(145deg, #ffffff 0%, #f9fafb 100%)',
+        boxShadow: '0 10px 25px rgba(0, 0, 0, 0.05)',
+        overflow: 'hidden'
+    }}
+>
+    <div 
+        className="card-body d-flex justify-content-between align-items-center p-4"
+        style={{
+            background: 'linear-gradient(to right, #059669 0%, #10b981 100%)',
+            borderRadius: '12px',
+            position: 'relative',
+            overflow: 'hidden'
+        }}
+    >
+        {/* Background Pattern */}
+        <div 
+            style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                opacity: 0.1,
+                backgroundImage: 'radial-gradient(circle, #ffffff 10%, transparent 10.5%), radial-gradient(circle, #ffffff 10%, transparent 10.5%)',
+                backgroundSize: '30px 30px',
+                backgroundPosition: '0 0, 15px 15px'
+            }}
+        ></div>
+        
+        {/* Welcome Text */}
+        <div style={{ position: 'relative', zIndex: 5 }}>
+            <h2 className="mb-1" style={{ color: 'white', fontWeight: '600' }}>
+                Welcome back, {userName}
+            </h2>
+            <p className="mb-0" style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
+                {enrolledClassrooms.length} Active {enrolledClassrooms.length === 1 ? 'Classroom' : 'Classrooms'}
+            </p>
+        </div>
+        
+        {/* Join Button */}
+        <button
+            onClick={() => setShowJoinModal(true)}
+            className="btn px-4 py-2"
+            style={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                color: '#059669',
+                border: 'none',
+                borderRadius: '12px',
+                fontWeight: '500',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                zIndex: 5,
+                transition: 'all 0.2s ease'
+            }}
+            onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 6px 15px rgba(0, 0, 0, 0.1)';
+            }}
+            onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+            }}
+        >
+            <i className="fas fa-plus me-2"></i> Join Classroom
+        </button>
+    </div>
+</div>
 
                     {!selectedClassroom ? (
-                        // Classroom Cards Grid
-                        <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                        <div className="classrooms-grid">
                             {enrolledClassrooms.map((classroom, index) => (
-                                <div className="col" key={classroom._id}>
+                                <div 
+                                    key={classroom._id} 
+                                    className="card classroom-card shadow-sm"
+                                    onClick={() => {
+                                        setSelectedClassroom(classroom);
+                                        fetchAssignments(classroom._id);
+                                    }}
+                                    style={{
+                                        cursor: 'pointer',
+                                        borderRadius: '12px',
+                                        border: 'none',
+                                        overflow: 'hidden'
+                                    }}
+                                >
                                     <div 
-                                        className="card h-100 border-0 shadow-sm"
-                                        style={{ cursor: 'pointer' }}
-                                        onClick={() => {
-                                            setSelectedClassroom(classroom);
-                                            fetchAssignments(classroom._id);
+                                        className="card-header py-3 border-0 d-flex justify-content-between align-items-center"
+                                        style={{
+                                            backgroundColor: getBackgroundColor(index),
+                                            color: 'white',
+                                            borderRadius: '12px 12px 0 0',
+                                            position: 'relative'
                                         }}
                                     >
-                                        {/* Colored Header */}
-                                        <div 
-                                            className="card-header border-0 text-white py-5 text-center"
-                                            style={{
-                                                background: getBackgroundColor(index),
-                                                borderRadius: '12px 12px 0 0'
+                                        <div className="d-flex align-items-center">
+                                            <div 
+                                                className="d-flex justify-content-center align-items-center me-2"
+                                                style={{
+                                                    width: '32px',
+                                                    height: '32px',
+                                                    borderRadius: '8px',
+                                                    backgroundColor: 'rgba(255,255,255,0.2)',
+                                                    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)'
+                                                }}
+                                            >
+                                                <i className="fas fa-graduation-cap"></i>
+                                            </div>
+                                            <h5 className="card-title text-white fw-bold mb-0" style={{ 
+                                                fontSize: '1.1rem',
+                                                textOverflow: 'ellipsis',
+                                                overflow: 'hidden',
+                                                whiteSpace: 'nowrap'
+                                            }}>
+                                                {classroom.name}
+                                            </h5>
+                                        </div>
+                                        
+                                        <button 
+                                            className="btn btn-sm p-1"
+                                            style={{ 
+                                                width: '28px', 
+                                                height: '28px', 
+                                                borderRadius: '6px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: '#fff',
+                                                backgroundColor: 'rgba(255,255,255,0.2)',
+                                                border: 'none'
                                             }}
+                                            onClick={(e) => handleExitClassroom(classroom._id, e)}
+                                            title="Exit classroom"
                                         >
-                                            <h3 className="display-4 mb-2">{classroom.name}</h3>
-                                            <span className="badge bg-white bg-opacity-25">
-                                                {classroom.subject}
-                                            </span>
+                                            <i className="fas fa-sign-out-alt"></i>
+                                        </button>
+                                    </div>
+
+                                    <div className="card-body p-3">
+                                        <div className="d-flex justify-content-between align-items-center mb-3">
+                                            <div className="d-flex align-items-center">
+                                                <div style={{ 
+                                                    width: '32px', 
+                                                    height: '32px', 
+                                                    backgroundColor: '#f0f9ff',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '8px',
+                                                    marginRight: '8px'
+                                                }}>
+                                                    <i className="fas fa-key" style={{ color: '#0ea5e9' }}></i>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Room Code</div>
+                                                    <div className="fw-bold" style={{ color: '#111827' }}>
+                                                        {classroom.roomCode}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="d-flex align-items-center">
+                                                <div style={{ 
+                                                    width: '32px', 
+                                                    height: '32px', 
+                                                    backgroundColor: '#f0fdf4',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    borderRadius: '8px',
+                                                    marginRight: '8px'
+                                                }}>
+                                                    <i className="fas fa-book" style={{ color: '#10b981' }}></i>
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Subject</div>
+                                                    <div className="fw-bold" style={{ color: '#111827' }}>
+                                                        {classroom.subject}
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
 
-                                        {/* Room Code Footer */}
-                                        <div className="card-footer bg-light border-0 py-3">
-                                            <div className="d-flex justify-content-between align-items-center">
-                                                <div>
-                                                    <small className="text-muted">Room Code:</small>
-                                                    <span className="ms-2 fw-semibold">{classroom.roomCode}</span>
+                                        {/* Updated metrics section */}
+                                        <div className="mt-auto">
+                                            <div className="row g-2 row-cols-2">
+                                                {/* Students Count */}
+                                                <div className="col">
+                                                    <div className="p-2 rounded-3 metric-tile" style={{ backgroundColor: '#f9fafb' }}>
+                                                        <div className="d-flex align-items-center">
+                                                            <div style={{ 
+                                                                width: '36px', 
+                                                                height: '36px', 
+                                                                backgroundColor: '#f0f9ff',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                borderRadius: '8px',
+                                                                marginRight: '12px'
+                                                            }}>
+                                                                <i className="fas fa-users" style={{ color: '#0ea5e9' }}></i>
+                                                            </div>
+                                                            <div>
+                                                                <div className="h5 m-0" style={{ fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+                                                                    {classroom.students?.length || 0}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Students</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <button 
-                                                    className="btn btn-link text-danger p-0"
-                                                    onClick={(e) => handleExitClassroom(classroom._id, e)}
-                                                >
-                                                    Exit
-                                                </button>
+
+                                                {/* Assignments Count */}
+                                                <div className="col">
+                                                    <div className="p-2 rounded-3 metric-tile" style={{ backgroundColor: '#f9fafb' }}>
+                                                        <div className="d-flex align-items-center">
+                                                            <div style={{ 
+                                                                width: '36px', 
+                                                                height: '36px', 
+                                                                backgroundColor: '#f0fdf4',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                borderRadius: '8px',
+                                                                marginRight: '12px'
+                                                            }}>
+                                                                <i className="fas fa-clipboard-list" style={{ color: '#10b981' }}></i>
+                                                            </div>
+                                                            <div>
+                                                                <div className="h5 m-0" style={{ fontSize: '1rem', fontWeight: '600', color: '#111827' }}>
+                                                                    {assignmentCounts[classroom._id] || 0}
+                                                                </div>
+                                                                <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>Assignments</div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="card-footer bg-white p-3 border-0" style={{ 
+                                        borderRadius: '0 0 12px 12px',
+                                        borderTop: '1px solid #f3f4f6'
+                                    }}>
+                                        <div className="d-flex align-items-center">
+                                            <i className="fas fa-calendar-alt me-2" style={{ color: '#9ca3af', fontSize: '0.875rem' }}></i>
+                                            <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                                                Joined on {new Date(classroom.createdAt).toLocaleDateString('en-US', { 
+                                                    year: 'numeric',
+                                                    month: 'short',
+                                                    day: 'numeric'
+                                                })}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
@@ -350,229 +628,210 @@ const StudentDashboard = () => {
                         // Modern Assignments View with Cards
                         <div className="card shadow-sm">
                             <div className="card-body">
-                                <div className="d-flex justify-content-between align-items-center mb-4">
-                                    <div>
-                                        <h4 className="mb-1">{selectedClassroom.name}</h4>
-                                        <p className="text-muted mb-0">
-                                            {assignments.length} Assignment{assignments.length !== 1 ? 's' : ''}
-                                        </p>
-                                    </div>
-                                    <button 
-                                        className="btn btn-light d-flex align-items-center gap-2"
-                                        onClick={() => setSelectedClassroom(null)}
-                                    >
-                                        <i className="bi bi-arrow-left"></i>
-                                        Back
-                                    </button>
-                                </div>
+                                <div className="classroom-header">
+  <div className="header-main">
+    <div className="header-title">
+      <div 
+        className="classroom-icon"
+        style={{
+          backgroundColor: getAssignmentColor(selectedClassroom.name.charAt(0).toUpperCase()),
+          color: 'white'
+        }}
+      >
+        <i className="fas fa-graduation-cap"></i>
+      </div>
+      <div>
+        <h4 className="mb-0">{selectedClassroom.name}</h4>
+        <span className="badge bg-light text-dark border">
+          {selectedClassroom.subject}
+        </span>
+      </div>
+    </div>
 
-                                {showSubmissionView && selectedAssignment ? (
-                                    <div className="w-full max-w-2xl mx-auto bg-white rounded shadow">
-                                        <AssignmentSubmissionModal
-                                            assignment={selectedAssignment}
-                                            onClose={handleCloseModal}
-                                            onSubmit={handleSubmitAssignment}
-                                        />
-                                    </div>
-                                ) : (
-                                    // Show assignment cards
-                                    <div className="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
-                                        {assignments.map((assignment) => (
-                                            <div className="col" key={assignment._id}>
-                                                <div 
-                                                    className="card h-100 border-0 shadow-sm hover-shadow"
-                                                    style={{ 
-                                                        transition: 'all 0.3s ease',
-                                                        cursor: 'pointer',
-                                                        backgroundColor: '#f8faff'
-                                                    }}
-                                                >
-                                                    {/* Assignment Header with Color */}
-                                                    <div 
-                                                        className="card-header border-0 p-4"
-                                                        style={{
-                                                            background: getAssignmentColor(assignment.title[0]),
-                                                            borderRadius: '12px 12px 0 0'
-                                                        }}
-                                                    >
-                                                        <div className="d-flex flex-column">
-                                                            <h5 className="text-white mb-2 fw-bold">{assignment.title}</h5>
-                                                            <div className="d-flex justify-content-between align-items-center">
-                                                                <div className="badge bg-white bg-opacity-25">
-                                                                    {assignment.maxMarks || 0} Points
-                                                                </div>
-                                                                <span className={`badge ${
-                                                                    assignment.submission 
-                                                                        ? 'bg-success' 
-                                                                        : isAssignmentOverdue(assignment.dueDate)
-                                                                            ? 'bg-danger'
-                                                                            : 'bg-white text-dark'
-                                                                }`}>
-                                                                    {assignment.submission 
-                                                                        ? 'Submitted' 
-                                                                        : isAssignmentOverdue(assignment.dueDate)
-                                                                            ? 'Overdue'
-                                                                            : 'Pending'}
-                                                                </span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
+    <div className="header-actions">
+      <div className="stats-badge">
+        <i className="fas fa-clipboard-list me-2"></i>
+        {assignments.length} Total Assignments
+      </div>
+      <div className="stats-badge">
+        <i className="fas fa-user-graduate me-2"></i>
+        {selectedClassroom.students?.length || 0} Students
+      </div>
+    </div>
 
-                                                    <div className="card-body p-4" style={{ backgroundColor: '#f8faff' }}>
-                                                        {/* Due Date with Consistent Format */}
-                                                        <div className="d-flex align-items-center mb-3">
-                                                            <i className="bi bi-calendar3 me-2 text-muted"></i>
-                                                            <div>
-                                                                <div className="text-muted">
-                                                                    Due: {formatDate(assignment.dueDate)}
-                                                                </div>
-                                                                <small className={`${
-                                                                    isAssignmentOverdue(assignment.dueDate)
-                                                                        ? 'text-danger'
-                                                                        : 'text-success'
-                                                                }`}>
-                                                                    {getFormattedTimeRemaining(assignment.dueDate)}
-                                                                </small>
-                                                            </div>
-                                                        </div>
+    <div className="toggle-buttons">
+      <button
+        className="btn btn-primary"
+        style={{
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '0.5rem'
+        }}
+      >
+        <i className="fas fa-tasks me-2"></i>
+        Assignments
+      </button>
+    </div>
+  </div>
+</div>
 
-                                                        {/* Description */}
-                                                        <p className="card-text mb-4" style={{ fontSize: '0.95rem' }}>
-                                                            {assignment.description || 'No description provided'}
-                                                        </p>
+                                {/* Assignments Section */}
+<div className="assignments-section mt-4">
+    <div className="card border-0 shadow-sm">
+        <div className="card-header section-header">
+            <div className="section-title">
+                <i className="fas fa-clipboard-list"></i>
+                <h5 className="mb-0">Assignments</h5>
+            </div>
+        </div>
+        
+        <div className="card-body p-0">
+            {assignments.length > 0 ? (
+                <div className="table-responsive">
+    <table className="table table-hover assignment-table mb-0">
+        <thead style={{ backgroundColor: '#f9fafb' }}>
+            <tr>
+                <th style={{ width: '25%' }}>Assignment</th>
+                <th style={{ width: '15%' }} className="d-none d-md-table-cell">Due Date</th>
+                <th style={{ width: '12%' }}>Status</th>
+                <th style={{ width: '10%' }} className="d-none d-md-table-cell">Grade</th>
+                <th style={{ width: '13%' }} className="d-none d-md-table-cell">Reference</th>
+                <th style={{ width: '13%' }} className="d-none d-md-table-cell">Feedback</th>
+                <th style={{ width: '12%' }}>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {assignments.map(assignment => (
+                <tr key={assignment._id}>
+                    <td data-label="Assignment">
+                        <div className="d-flex align-items-center gap-2">
+                            <div className="assignment-icon" 
+                                style={{ backgroundColor: getAssignmentColor(assignment.title[0]) }}>
+                                <i className="fas fa-file-alt"></i>
+                            </div>
+                            <div className="assignment-info">
+                                <div className="fw-semibold">{assignment.title}</div>
+                                <small className="text-muted d-md-none">
+                                    Due: {formatDate(assignment.dueDate)}
+                                </small>
+                            </div>
+                        </div>
+                    </td>
 
-                                                        {/* Faculty Assignment File */}
-                                                        {assignment.assignmentFile && (
-                                                            <div className="mb-4">
-                                                                <h6 className="text-muted mb-2" style={{
-                                                                    color: '#4b5563',
-                                                                    fontSize: '0.9rem',
-                                                                    fontWeight: '600'
-                                                                }}>
-                                                                    <i className="bi bi-file-earmark-text me-2" style={{ color: '#6366f1' }}></i>
-                                                                    Assignment Document
-                                                                </h6>
-                                                                <a
-                                                                    href={getBaseUrl(`${assignment.assignmentFile}`)}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    className="btn btn-sm d-flex align-items-center gap-2"
-                                                                    style={{
-                                                                        width: 'fit-content',
-                                                                        backgroundColor: '#f3f4f6',
-                                                                        color: '#4b5563',
-                                                                        border: '1px solid #e5e7eb',
-                                                                        borderRadius: '6px',
-                                                                        padding: '8px 16px',
-                                                                        transition: 'all 0.2s ease',
-                                                                        textDecoration: 'none',
-                                                                        fontSize: '0.875rem',
-                                                                        fontWeight: '500',
-                                                                        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
-                                                                    }}
-                                                                    onMouseOver={(e) => {
-                                                                        e.currentTarget.style.backgroundColor = '#e5e7eb';
-                                                                        e.currentTarget.style.color = '#1f2937';
-                                                                    }}
-                                                                    onMouseOut={(e) => {
-                                                                        e.currentTarget.style.backgroundColor = '#f3f4f6';
-                                                                        e.currentTarget.style.color = '#4b5563';
-                                                                    }}
-                                                                >
-                                                                    <i className="bi bi-download" style={{ color: '#6366f1' }}></i>
-                                                                    Reference Document
-                                                                </a>
-                                                            </div>
-                                                        )}
+                    <td data-label="Due Date" className="d-none d-md-table-cell">
+                        {formatDate(assignment.dueDate)}
+                        <div className="small text-muted">
+                            {getFormattedTimeRemaining(assignment.dueDate)}
+                        </div>
+                    </td>
 
-                                                        {/* Marks and Submission Status */}
-                                                        <div className="mb-4">
-                                                            <div className="d-flex justify-content-between align-items-center p-3 rounded"
-                                                                 style={{ backgroundColor: '#ffffff' }}>
-                                                                <div>
-                                                                    <h6 className="mb-1">Marks</h6>
-                                                                    {assignment.submission && assignment.submission.grade !== undefined ? (
-                                                                        <span className="text-success fw-semibold">
-                                                                            {assignment.submission.grade} / {assignment.maxMarks}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-muted">
-                                                                            -- / {assignment.maxMarks}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                                {assignment.submission && assignment.submission.feedback && (
-                                                                    <div>
-                                                                        <h6 className="mb-1">Feedback</h6>
-                                                                        <small className="text-muted">
-                                                                            {assignment.submission.feedback}
-                                                                        </small>
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
+                    <td data-label="Status">
+                        <span className={`status-badge ${getStatusClass(assignment)}`}>
+                            {getStatusText(assignment)}
+                        </span>
+                    </td>
 
-                                                        {/* Submission Status or Submit Button */}
-                                                        {assignment.submission ? (
-                                                            <div className="p-3 rounded" style={{ backgroundColor: '#ffffff' }}>
-                                                                <div className="d-flex justify-content-between align-items-center">
-                                                                    <div>
-                                                                        <small className="text-muted d-block">
-                                                                            Submitted: {formatDate(assignment.submission.submittedAt)}
-                                                                        </small>
-                                                                        {assignment.submission.submissionUrl && (
-                                                                            <a 
-                                                                                href={getBaseUrl(`${assignment.submission.submissionUrl}`)}
-                                                                                target="_blank"
-                                                                                rel="noopener noreferrer"
-                                                                                className="btn btn-link btn-sm p-0 text-primary"
-                                                                            >
-                                                                                View Submission
-                                                                            </a>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => {
-                                                                    setSelectedAssignment(assignment);
-                                                                    setShowSubmissionView(true);
-                                                                }}
-                                                                className={`btn w-100 ${
-                                                                    assignment.submission 
-                                                                        ? isAssignmentOverdue(assignment.dueDate)
-                                                                            ? 'btn-secondary disabled'
-                                                                            : 'btn-warning' 
-                                                                        : isAssignmentOverdue(assignment.dueDate)
-                                                                            ? 'btn-outline-danger'
-                                                                            : 'btn-primary'
-                                                                }`}
-                                                                disabled={isAssignmentOverdue(assignment.dueDate) && assignment.submission}
-                                                            >
-                                                                <i className={`bi ${
-                                                                    assignment.submission 
-                                                                        ? isAssignmentOverdue(assignment.dueDate)
-                                                                            ? 'bi-check-circle'
-                                                                            : 'bi-arrow-repeat' 
-                                                                        : 'bi-upload'
-                                                                } me-2`}></i>
-                                                                {assignment.submission 
-                                                                    ? isAssignmentOverdue(assignment.dueDate)
-                                                                        ? 'Submitted'
-                                                                        : 'Resubmit' 
-                                                                    : isAssignmentOverdue(assignment.dueDate)
-                                                                        ? 'Deadline Passed'
-                                                                        : 'Submit Assignment'
-                                                                }
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
+                    <td data-label="Grade" className="d-none d-md-table-cell">
+                        {assignment.submission?.grade !== undefined ? (
+                            <span className="text-success fw-semibold">
+                                {assignment.submission.grade}/{assignment.maxMarks}
+                            </span>
+                        ) : (
+                            <span className="text-muted">--/{assignment.maxMarks}</span>
+                        )}
+                    </td>
+
+                    {/* Reference Column */}
+<td data-label="Reference" className="d-none d-md-table-cell text-center">
+    {assignment.assignmentFile ? (
+        <button 
+            className="btn btn-sm btn-outline-secondary icon-button"
+            onClick={() => window.open(getBaseUrl(assignment.assignmentFile), '_blank')}
+            title="View Reference Document"
+        >
+            <i className="fas fa-file-pdf me-2"></i>
+            Ref. Doc.
+        </button>
+    ) : (
+        <button 
+            className="btn btn-sm btn-outline-secondary icon-button"
+            disabled
+        >
+            <i className="fas fa-file-pdf me-2"></i>
+            No Doc
+        </button>
+    )}
+</td>
+
+{/* Feedback Column */}
+<td data-label="Feedback" className="d-none d-md-table-cell text-center">
+    {assignment.submission?.feedback ? (
+        <button 
+            className="btn btn-sm btn-outline-info icon-button"
+            onClick={() => handleShowFeedback(assignment)}
+            title="View Feedback"
+        >
+            <i className="fas fa-comment-alt me-2"></i>
+            Feedback
+        </button>
+    ) : (
+        <button 
+            className="btn btn-sm btn-outline-secondary icon-button"
+            disabled
+        >
+            <i className="fas fa-comment-alt me-2"></i>
+            Feedback
+        </button>
+    )}
+</td>
+
+                    <td data-label="Actions" className="d-none d-md-table-cell text-center">
+                        <div className="action-buttons">
+                            {assignment.submission ? (
+                                <button 
+                                    className="btn btn-sm btn-outline-primary w-100"
+                                    onClick={() => handleViewSubmission(assignment)}
+                                    title={assignment.submission?.submissionFile ? "View Submitted Document" : "No submission file"}
+                                >
+                                    <i className="fas fa-eye"></i>
+                                    <span className="d-none d-md-inline ms-1">
+                                        View Submission
+                                    </span>
+                                </button>
+                            ) : (
+                                <button
+                                    className="btn btn-sm btn-primary w-100"
+                                    onClick={() => handleSubmitAssignment(assignment)}
+                                    disabled={isAssignmentOverdue(assignment.dueDate)}
+                                >
+                                    <i className="fas fa-upload"></i>
+                                    <span className="d-none d-md-inline ms-1">Submit</span>
+                                </button>
+                            )}
+                        </div>
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+</div>
+            ) : (
+                <div className="text-center py-5">
+                    <div style={{ color: '#9ca3af', marginBottom: '16px' }}>
+                        <i className="fas fa-clipboard fa-3x"></i>
+                    </div>
+                    <h5 style={{ color: '#4b5563', fontWeight: '500' }}>No assignments yet</h5>
+                    <p className="text-muted" style={{ maxWidth: '400px', margin: '0 auto' }}>
+                        There are no assignments posted in this classroom yet.
+                    </p>
+                </div>
+            )}
+        </div>
+    </div>
+</div>
+
                             </div>
                         </div>
                     )}
@@ -599,11 +858,56 @@ const StudentDashboard = () => {
                             onClose={() => {
                                 setShowSubmissionModal(false);
                                 setSelectedAssignment(null);
-                                setSearchParams({});
-                                setSelectedClassroom(null);
                             }}
-                            triggerUpdate={triggerUpdate}
+                            onSubmit={handleSubmitAssignment}
                         />
+                    </div>
+                </div>
+            )}
+
+            {/* Add this modal component before the closing div of your return statement */}
+            {showFeedbackModal && selectedFeedback && (
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <div className="card border-0 shadow-none">
+                            <div className="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                                <h5 className="mb-0">
+                                    <i className="fas fa-comment-alt me-2 text-info"></i>
+                                    Assignment Feedback
+                                </h5>
+                                <button 
+                                    className="btn btn-icon btn-sm btn-light"
+                                    onClick={() => {
+                                        setShowFeedbackModal(false);
+                                        setSelectedFeedback(null);
+                                    }}
+                                >
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div className="card-body">
+                                <h6 className="mb-3">{selectedFeedback.title}</h6>
+                                <div className="mb-3">
+                                    <span className="badge bg-success">
+                                        Grade: {selectedFeedback.grade}/{selectedFeedback.maxMarks}
+                                    </span>
+                                </div>
+                                <div className="feedback-content p-3 bg-light rounded">
+                                    {selectedFeedback.feedback}
+                                </div>
+                            </div>
+                            <div className="card-footer bg-white border-0">
+                                <button 
+                                    className="btn btn-secondary w-100"
+                                    onClick={() => {
+                                        setShowFeedbackModal(false);
+                                        setSelectedFeedback(null);
+                                    }}
+                                >
+                                    Close
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -709,6 +1013,28 @@ const getFormattedTimeRemaining = (dueDate) => {
         return `${diffHours} hour${diffHours !== 1 ? 's' : ''} remaining`;
     }
     return 'Due soon';
+};
+
+const getStatusClass = (assignment) => {
+    if (assignment.submission) return 'status-submitted';
+    if (isAssignmentOverdue(assignment.dueDate)) return 'status-overdue';
+    return 'status-pending';
+};
+
+const getStatusText = (assignment) => {
+    if (assignment.submission) return 'Submitted';
+    if (isAssignmentOverdue(assignment.dueDate)) return 'Overdue';
+    return 'Pending';
+};
+
+const checkFileExists = async (url) => {
+    try {
+        const response = await fetch(getBaseUrl(url), { method: 'HEAD' });
+        return response.ok;
+    } catch (error) {
+        console.error("Error checking file:", error);
+        return false;
+    }
 };
 
 export default StudentDashboard;

@@ -72,32 +72,44 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
     return (
         <div className="submission-modal">
             <div className="submission-header">
-                <h2 className="submission-title">Submit Assignment</h2>
-                <button onClick={onClose} className="close-button">×</button>
+                <h2 className="submission-title">
+                    <i className="fas fa-cloud-upload-alt"></i>
+                    Submit Assignment
+                </h2>
+                <button onClick={onClose} className="close-button">
+                    <i className="fas fa-times"></i>
+                </button>
             </div>
 
             <h3 className="assignment-title">{assignment.title}</h3>
 
             <div className="assignment-details">
                 <div className="detail-group">
-                    <label className="detail-label">Due Date</label>
+                    <label className="detail-label">
+                        <i className="fas fa-clock me-2"></i>
+                        Due Date
+                    </label>
                     <div className="detail-value">
                         {new Date(assignment.dueDate).toLocaleString()}
                     </div>
                 </div>
                 <div className="detail-group">
-                    <label className="detail-label">Maximum Marks</label>
+                    <label className="detail-label">
+                        <i className="fas fa-star me-2"></i>
+                        Maximum Marks
+                    </label>
                     <div className="detail-value">{assignment.maxMarks}</div>
                 </div>
             </div>
 
             {isSubmitted ? (
                 <div className="alert alert-info">
+                    <i className="fas fa-info-circle me-2"></i>
                     This assignment has already been submitted.
                 </div>
             ) : (
                 <form onSubmit={handleSubmit}>
-                    <div className="justify-content-center file-upload-container">
+                    <div className="file-upload-container">
                         <input
                             type="file"
                             accept=".pdf"
@@ -108,17 +120,24 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                         />
                         <label htmlFor="file-upload" className="file-upload-area">
                             <div className="file-upload-text">
-                                Drop your PDF file here, or click to select
+                                <i className="fas fa-file-upload file-upload-icon"></i>
+                                <div>Drop your PDF file here, or click to select</div>
+                                <div className="file-upload-hint">PDF only, max 5MB</div>
                             </div>
-                            <div className="file-upload-hint">PDF only, max 5MB</div>
-                            {file && <div className="selected-file">{file.name}</div>}
+                            {file && (
+                                <div className="selected-file">
+                                    <i className="fas fa-file-pdf"></i>
+                                    {file.name}
+                                </div>
+                            )}
                         </label>
                     </div>
 
                     {message.text && (
-                        <p className={`mt-2 text-sm ${message.type === 'error' ? 'text-red-600' : 'text-green-600'}`}>
+                        <div className={`alert ${message.type === 'error' ? 'alert-danger' : 'alert-success'} mt-3`}>
+                            <i className={`fas ${message.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'} me-2`}></i>
                             {message.text}
-                        </p>
+                        </div>
                     )}
 
                     <div className="button-container">
@@ -127,6 +146,7 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                             className="cancel-button" 
                             onClick={onClose}
                         >
+                            <i className="fas fa-times"></i>
                             Cancel
                         </button>
                         <button
@@ -134,6 +154,7 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                             className="submit-button"
                             disabled={!file || uploading || isSubmitted}
                         >
+                            <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>
                             {uploading ? 'Submitting...' : 'Submit'}
                         </button>
                     </div>

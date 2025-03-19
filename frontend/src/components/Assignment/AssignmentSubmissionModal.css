@@ -1,21 +1,33 @@
 .submission-modal {
     width: 100%;
-    background-color: white;
-    padding: 2rem 3rem;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    max-width: 600px;
+    background: white;
+    padding: 2rem;
+    border-radius: 16px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .submission-header {
     text-align: center;
-    margin-bottom: 3rem;
+    margin-bottom: 2rem;
     position: relative;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .submission-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    color: #111827;
+    margin: 0;
     font-size: 1.75rem;
     font-weight: 600;
-    color: #1a1a1a;
+}
+
+.submission-title i {
+    color: #6366f1;
+    font-size: 1.5rem;
 }
 
 .close-button {
@@ -73,22 +85,52 @@
 }
 
 .file-upload-area {
-    border: 2px dashed #94a3b8;
-    border-radius: 8px;
-    padding: 3rem 2rem;
+    border: 2px dashed #6366f1;
+    background: #f5f5ff;
+    padding: 2rem;
+    border-radius: 12px;
+    transition: all 0.2s ease;
     cursor: pointer;
-    transition: all 0.3s ease;
     text-align: center;
 }
 
+.file-upload-area:hover {
+    border-color: #4f46e5;
+    background: #f0f0ff;
+}
+
 .file-upload-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
     color: #475569;
     margin-bottom: 0.5rem;
+}
+
+.file-upload-icon {
+    font-size: 2.5rem;
+    color: #6366f1;
+    margin-bottom: 1rem;
 }
 
 .file-upload-hint {
     font-size: 0.875rem;
     color: #94a3b8;
+}
+
+.selected-file {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: white;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.selected-file i {
+    color: #6366f1;
 }
 
 .button-container {
@@ -101,21 +143,37 @@
 .cancel-button {
     padding: 0.75rem 1.5rem;
     border: 1px solid #e5e7eb;
-    border-radius: 6px;
+    border-radius: 8px;
     background: white;
     color: #4b5563;
     font-weight: 500;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.cancel-button:hover {
+    background: #f9fafb;
 }
 
 .submit-button {
     padding: 0.75rem 1.5rem;
-    background-color: #93c5fd;
+    background: #6366f1;
     color: white;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     font-weight: 500;
     cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+}
+
+.submit-button:hover:not(:disabled) {
+    background: #4f46e5;
 }
 
 .submit-button:disabled {
