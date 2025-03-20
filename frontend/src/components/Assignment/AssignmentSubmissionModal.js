@@ -3,66 +3,87 @@ import axios from 'axios';
 import './AssignmentSubmissionModal.css';
 import { getApiUrl } from '../../config/api.config';
 
-const AssignmentSubmissionModal = ({ assignment, onClose }) => {
-    const [file, setFile] = useState(null);
-    const [uploading, setUploading] = useState(false);
-    const [message, setMessage] = useState({ type: '', text: '' });
+const AssignmentSubmissionModal = ({ assignment, onClose, onSubmitSuccess }) => {
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState(null);
+    const [success, setSuccess] = useState(null);
 
     const handleFileChange = (e) => {
-        const selectedFile = e.target.files[0];
-        if (!selectedFile) return;
+        const file = e.target.files[0];
         
-        if (selectedFile.type !== 'application/pdf') {
-            setMessage({ type: 'error', text: 'Only PDF files are allowed.' });
-            return;
+        if (file) {
+            if (file.type !== 'application/pdf') {
+                setError('Only PDF files are allowed');
+                setSelectedFile(null);
+                e.target.value = null;
+                return;
+            }
+            
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                setError('File size should not exceed 10MB');
+                setSelectedFile(null);
+                e.target.value = null;
+                return;
+            }
+            
+            setSelectedFile(file);
+            setError(null);
         }
-        if (selectedFile.size > 5 * 1024 * 1024) {
-            setMessage({ type: 'error', text: 'File size must be less than 5MB.' });
-            return;
-        }
-        
-        setFile(selectedFile);
-        setMessage({ type: '', text: '' });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!file) {
-            setMessage({ type: 'error', text: 'Please select a file to upload.' });
+        
+        if (!selectedFile) {
+            setError('Please select a file to submit');
             return;
         }
-
-        setUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
+        
         try {
+            setIsSubmitting(true);
+            setError(null);
+            
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
-
+            
+            // Create form data with field name 'file' for multer
+            const formData = new FormData();
+            formData.append('file', selectedFile);
+            
+            console.log('Submitting assignment:', assignment._id);
+            console.log('File to upload:', selectedFile.name, selectedFile.type, selectedFile.size);
+            
             const response = await axios.post(
                 getApiUrl(`/student/assignments/${assignment._id}/submit`),
                 formData,
                 {
                     headers: {
-                        'Content-Type': 'multipart/form-data',
                         'Authorization': `Bearer ${token}`,
-                        'X-Session-ID': sessionId
+                        'X-Session-ID': sessionId,
+                        'Content-Type': 'multipart/form-data'
                     }
                 }
             );
-
+            
+            console.log('Submission response:', response.data);
+            
             if (response.data.success) {
-                setMessage({ type: 'success', text: 'Assignment submitted successfully!' });
+                setSuccess('Assignment submitted successfully');
+                
+                // Wait a bit to show success message
                 setTimeout(() => {
                     onClose();
-                    window.location.reload();
-                }, 2000);
+                    if (onSubmitSuccess) onSubmitSuccess();
+                }, 1500);
+            } else {
+                throw new Error(response.data.message || 'Failed to submit assignment');
             }
-        } catch (err) {
-            setMessage({ type: 'error', text: err.response?.data?.message || 'Submission failed.' });
+        } catch (error) {
+            console.error('Submission error:', error);
+            setError(error.response?.data?.message || error.message || 'Failed to submit assignment');
         } finally {
-            setUploading(false);
+            setIsSubmitting(false);
         }
     };
 
@@ -122,22 +143,22 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                             <div className="file-upload-text">
                                 <i className="fas fa-file-upload file-upload-icon"></i>
                                 <div>Drop your PDF file here, or click to select</div>
-                                <div className="file-upload-hint">PDF only, max 5MB</div>
+                                <div className="file-upload-hint">PDF only, max 10MB</div>
                             </div>
-                            {file && (
+                            {selectedFile && (
                                 <div className="selected-file">
                                     <i className="fas fa-file-pdf"></i>
-                                    {file.name}
+                                    {selectedFile.name}
                                 </div>
                             )}
                         </label>
                     </div>
 
-                    {message.text && (
-                        <div className={`alert ${message.type === 'error' ? 'alert-danger' : 'alert-success'} mt-3`}>
-                            <i className={`fas ${message.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'} me-2`}></i>
-                            {message.text}
-                        </div>
+                    {error && (
+                        <div className="error-message">{error}</div>
+                    )}
+                    {success && (
+                        <div className="success-message">{success}</div>
                     )}
 
                     <div className="button-container">
@@ -145,6 +166,7 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                             type="button" 
                             className="cancel-button" 
                             onClick={onClose}
+                            disabled={isSubmitting}
                         >
                             <i className="fas fa-times"></i>
                             Cancel
@@ -152,10 +174,10 @@ const AssignmentSubmissionModal = ({ assignment, onClose }) => {
                         <button
                             type="submit"
                             className="submit-button"
-                            disabled={!file || uploading || isSubmitted}
+                            disabled={!selectedFile || isSubmitting || isSubmitted}
                         >
-                            <i className={`fas ${uploading ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>
-                            {uploading ? 'Submitting...' : 'Submit'}
+                            <i className={`fas ${isSubmitting ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>
+                            {isSubmitting ? 'Submitting...' : 'Submit'}
                         </button>
                     </div>
                 </form>

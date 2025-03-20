@@ -649,10 +649,17 @@ const FacultyDashboard = () => {
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
 
-            // Upload file first if it exists
+            console.log('Starting assignment creation process...');
+
+            // First upload the file
             if (formData.get('assignmentFile')) {
+                console.log('Uploading file to Firebase...');
+                
+                // Create a new FormData with the correct field name 'file'
                 const fileFormData = new FormData();
                 fileFormData.append('file', formData.get('assignmentFile'));
+
+                console.log('File to upload:', formData.get('assignmentFile').name);
 
                 const uploadResponse = await axios.post(
                     getApiUrl('/faculty/upload'),
@@ -666,38 +673,59 @@ const FacultyDashboard = () => {
                     }
                 );
 
-                if (uploadResponse.data.success) {
-                    formData.set('assignmentFile', uploadResponse.data.fileUrl);
+                console.log('File upload response:', uploadResponse.data);
+
+                if (!uploadResponse.data.success) {
+                    throw new Error(uploadResponse.data.message || 'File upload failed');
                 }
+
+                // Replace file object with URL
+                const fileUrl = uploadResponse.data.fileUrl;
+                const filePath = uploadResponse.data.filePath;
+                
+                console.log('Setting file URL and path:', { fileUrl, filePath });
+                
+                formData.set('assignmentFile', fileUrl);
+                formData.set('filePath', filePath);
             }
 
+            // Prepare assignment data
+            const assignmentData = {
+                title: formData.get('title'),
+                description: formData.get('description'),
+                dueDate: formData.get('dueDate'),
+                maxMarks: formData.get('maxMarks'),
+                assignmentFile: formData.get('assignmentFile'),
+                filePath: formData.get('filePath')
+            };
+
+            console.log('Creating assignment with data:', assignmentData);
+
+            // Create assignment
             const response = await axios.post(
                 getApiUrl(`/faculty/classrooms/${selectedClassroom._id}/assignments`),
-                {
-                    title: formData.get('title'),
-                    description: formData.get('description'),
-                    dueDate: formData.get('dueDate'),
-                    maxMarks: formData.get('maxMarks'),
-                    assignmentFile: formData.get('assignmentFile')
-                },
+                assignmentData,
                 {
                     headers: {
                         'Authorization': `Bearer ${token}`,
-                        'X-Session-ID': sessionId
+                        'X-Session-ID': sessionId,
+                        'Content-Type': 'application/json'
                     }
                 }
             );
+
+            console.log('Assignment creation response:', response.data);
 
             if (response.data.success) {
                 setSuccess('Assignment created successfully');
                 setShowAssignmentModal(false);
                 await fetchAssignments(selectedClassroom._id);
-                triggerUpdate();
+            } else {
+                throw new Error(response.data.message || 'Failed to create assignment');
             }
         } catch (error) {
             console.error('Assignment creation error:', error);
-            setError(error.response?.data?.message || 'Failed to create assignment');
-            throw error;
+            setError(error.response?.data?.message || error.message || 'Failed to create assignment');
         }
     };
 

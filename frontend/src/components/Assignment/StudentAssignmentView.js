@@ -12,6 +12,40 @@ const formatDate = (date) => {
 };
 
 const StudentAssignmentView = ({ assignments, onSubmit }) => {
+    const handleViewFile = (fileUrl) => {
+        try {
+            if (!fileUrl) {
+                console.error('No file URL available');
+                return;
+            }
+
+            console.log('Opening file URL:', fileUrl);
+            
+            // Directly open the URL in a new tab
+            window.open(fileUrl, '_blank');
+        } catch (error) {
+            console.error('Error viewing file:', error);
+            console.error('Error opening file');
+        }
+    };
+
+    const handleViewSubmission = (submissionUrl) => {
+        try {
+            if (!submissionUrl) {
+                console.error('No submission available');
+                return;
+            }
+            
+            console.log('Opening submission URL:', submissionUrl);
+            
+            // Directly open the URL in a new tab
+            window.open(submissionUrl, '_blank');
+        } catch (error) {
+            console.error('Error viewing submission:', error);
+            console.error('Error opening submission');
+        }
+    };
+
     return (
         <div className="space-y-4">
             {assignments.map(assignment => (

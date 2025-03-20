@@ -11,6 +11,10 @@ const { sendInviteEmail, notifyNewAssignment, notifyGradePosted } = require('../
 const multer = require('multer');
 const PDFParser = require('pdf2json');
 const axios = require('axios');
+const { uploadToFirebase, deleteFromFirebase } = require('../utils/firebaseStorage');
+const mongoose = require('mongoose');
+const { extractTextFromPdf, generateIdealAnswers } = require('../utils/aiUtils');
+const { gradeSubmission } = require('../utils/grading');
 
 // Add this helper function at the top of the file after imports
 const extractPDFText = async (filePath) => {
@@ -267,20 +271,11 @@ router.get('/classrooms/:classroomId', authMiddleware('Faculty'), async (req, re
     }
 });
 
-// Configure multer for file upload
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/assignments/'); // Make sure this directory exists
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
-});
-
-const upload = multer({ 
-    storage: storage,
+// Configure multer for memory storage
+const upload = multer({
+    storage: multer.memoryStorage(),
     limits: {
-        fileSize: 5 * 1024 * 1024 // 5MB limit
+        fileSize: 10 * 1024 * 1024 // 10MB limit
     },
     fileFilter: (req, file, cb) => {
         if (file.mimetype === 'application/pdf') {
@@ -291,7 +286,7 @@ const upload = multer({
     }
 });
 
-// File upload route
+// File upload route - Ensure field name is 'file'
 router.post('/upload', authMiddleware('Faculty'), upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -301,11 +296,16 @@ router.post('/upload', authMiddleware('Faculty'), upload.single('file'), async (
             });
         }
 
-        const fileUrl = `/uploads/assignments/${req.file.filename}`;
+        console.log('Uploading file to Firebase:', req.file.originalname);
         
+        const result = await uploadToFirebase(req.file, 'assignments');
+        
+        console.log('Firebase upload result:', result);
+
         res.json({
             success: true,
-            fileUrl,
+            fileUrl: result.fileUrl,
+            filePath: result.path,
             message: 'File uploaded successfully'
         });
     } catch (error) {
@@ -317,147 +317,94 @@ router.post('/upload', authMiddleware('Faculty'), upload.single('file'), async (
     }
 });
 
-// Create assignment route
+// Create assignment route with GROQ ideal answers generation
 router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), async (req, res) => {
     try {
         const { classroomId } = req.params;
-        const { title, description, dueDate, maxMarks, assignmentFile } = req.body;
+        const { title, description, dueDate, maxMarks, assignmentFile, filePath } = req.body;
         const facultyId = req.user._id;
 
-        // Extract text from faculty's assignment document
-        const assignmentFilePath = path.join(__dirname, '..', assignmentFile);
-        const assignmentText = await extractPDFText(assignmentFilePath);
-        console.log('Faculty Assignment Text:', assignmentText);
-
-        // Generate ideal answers using AI with better prompt
-        const idealAnswersResponse = await axios.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            {
-                model: "llama3-8b-8192",
-                messages: [
-                    {
-                        role: "system",
-                        content: "You are a subject matter expert creating ideal answers and marking criteria. Keep answers concise and within token limits."
-                    },
-                    {
-                        role: "user",
-                        content: `
-                            Based on this assignment:
-                            Title: ${title}
-                            Description: ${description}
-                            Content: ${assignmentText}
-
-                            Create a concise ideal answer sheet with marking criteria.
-                            Keep each answer under 200 words.
-                            
-                            Respond ONLY with this exact JSON structure:
-                            {
-                                "questions": [
-                                    {
-                                        "questionNumber": number,
-                                        "idealAnswer": "brief answer",
-                                        "keyPoints": ["point1", "point2"],
-                                        "maxMarks": number,
-                                        "markingCriteria": ["criteria1", "criteria2"]
-                                    }
-                                ],
-                                "totalMarks": ${maxMarks}
-                            }
-                        `
-                    }
-                ],
-                max_tokens: 4000,
-                temperature: 0.1
-            },
-            {
-                headers: { 
-                    'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-
-        // Parse and validate the response
-        let idealAnswers;
-        try {
-            const responseContent = idealAnswersResponse.data.choices[0].message.content.trim();
-            console.log('Raw AI Response:', responseContent);
-            
-            // Clean the response string before parsing
-            const cleanedContent = responseContent
-                .replace(/[\n\r]/g, ' ')
-                .replace(/\s+/g, ' ')
-                .replace(/\\./g, '')
-                .replace(/[^\x20-\x7E]/g, '')
-                .replace(/```[^`]*```/g, ''); // Remove code blocks
-            
-            // Try to extract valid JSON
-            const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                idealAnswers = JSON.parse(jsonMatch[0]);
-            } else {
-                throw new Error('No valid JSON found in response');
-            }
-
-            // Validate the structure
-            if (!idealAnswers.questions || !Array.isArray(idealAnswers.questions)) {
-                throw new Error('Invalid response structure');
-            }
-        } catch (parseError) {
-            console.error('AI response parsing error:', parseError);
-            throw new Error('Failed to generate ideal answers');
-        }
-
-        // Create and save the assignment
-        const assignment = new Assignment({
+        console.log('Creating assignment with data:', {
             title,
             description,
             dueDate,
             maxMarks,
             assignmentFile,
+            filePath
+        });
+
+        // Validate required fields
+        if (!title || !description || !dueDate || !maxMarks || !assignmentFile) {
+            return res.status(400).json({
+                success: false,
+                message: 'All fields are required'
+            });
+        }
+
+        // If filePath is undefined or missing, extract it from assignmentFile URL
+        let storedFilePath = filePath;
+        if (!storedFilePath || storedFilePath === 'undefined') {
+            // Extract path from URL, assuming URL format from Firebase
+            const urlParts = assignmentFile.split('/');
+            storedFilePath = `assignments/${urlParts[urlParts.length - 1]}`;
+            console.log('Generated filePath from URL:', storedFilePath);
+        }
+
+        // Extract text from PDF for ideal answers
+        let idealAnswers;
+        try {
+            console.log('Starting PDF extraction');
+            const assignmentText = await extractTextFromPdf(assignmentFile);
+            console.log(`Extracted ${assignmentText.length} characters from PDF`);
+            
+            // Generate ideal answers using GROQ
+            idealAnswers = await generateIdealAnswers(title, description, assignmentText, parseInt(maxMarks));
+            console.log('Successfully generated ideal answers using GROQ');
+        } catch (error) {
+            console.error('Error generating ideal answers:', error);
+            // Default ideal answers if generation fails
+            idealAnswers = {
+                questions: [{
+                    questionNumber: 1,
+                    idealAnswer: "Please review the assignment manually.",
+                    keyPoints: ["Manual review required"],
+                    maxMarks: parseInt(maxMarks),
+                    markingCriteria: ["Review submission thoroughly"]
+                }],
+                totalMarks: parseInt(maxMarks)
+            };
+        }
+
+        // Create the assignment
+        const assignment = new Assignment({
+            title,
+            description,
+            dueDate: new Date(dueDate),
+            maxMarks: parseInt(maxMarks),
+            assignmentFile,
+            filePath: storedFilePath,
             classroom: classroomId,
             createdBy: facultyId,
             idealAnswers
         });
 
         await assignment.save();
+        console.log('Assignment saved successfully');
 
-        // Update classroom with new assignment using $push
-        await Classroom.updateOne(
-            { _id: classroomId },
-            { 
-                $push: { assignments: assignment._id }
-            }
+        // Update classroom with new assignment
+        await Classroom.findByIdAndUpdate(
+            classroomId,
+            { $push: { assignments: assignment._id } }
         );
-
-        console.log('Assignment created successfully:', assignment);
-
-        // After successfully creating the assignment, notify students
-        const classroomWithStudents = await Classroom.findById(classroomId)
-            .populate('students', 'email name');
-
-        // Send notifications to students
-        console.log('Sending notifications to students:', classroomWithStudents.students);
-
-        for (const student of classroomWithStudents.students) {
-            try {
-                await notifyNewAssignment(
-                    student,
-                    assignment,
-                    classroomWithStudents.name // Use classroomWithStudents instead of classroom
-                );
-            } catch (error) {
-                console.error(`Failed to send notification to ${student.email}:`, error);
-            }
-        }
 
         res.json({
             success: true,
-            message: 'Assignment created and notifications sent',
+            message: 'Assignment created successfully',
             assignment
         });
+
     } catch (error) {
-        console.error('Error creating assignment:', error);
+        console.error('Assignment creation error:', error);
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to create assignment'
@@ -643,57 +590,55 @@ router.put('/assignments/:assignmentId/submissions/:submissionId/grade', authMid
     }
 });
 
-// Delete assignment
+// Update delete assignment route to use deleteOne instead of remove
 router.delete('/assignments/:assignmentId', authMiddleware('Faculty'), async (req, res) => {
     try {
-        const { assignmentId } = req.params;
-        const facultyId = req.user._id;
-
-        const assignment = await Assignment.findOne({
-            _id: assignmentId,
-            createdBy: facultyId
-        });
-
+        const assignment = await Assignment.findById(req.params.assignmentId);
+        
         if (!assignment) {
             return res.status(404).json({
                 success: false,
-                message: 'Assignment not found or unauthorized'
+                message: 'Assignment not found'
             });
         }
 
-        // Delete the assignment file if it exists
-        if (assignment.assignmentFile) {
-            const filePath = path.join(__dirname, '..', 'uploads', 
-                assignment.assignmentFile.split('/').pop()
-            );
-            if (fs.existsSync(filePath)) {
-                fs.unlinkSync(filePath);
-            }
+        // Delete assignment file from Firebase
+        if (assignment.filePath) {
+            console.log('Deleting file from Firebase:', assignment.filePath);
+            await deleteFromFirebase(assignment.filePath);
         }
 
-        // Delete all submission files
-        for (const submission of assignment.submissions) {
-            if (submission.submissionUrl) {
-                const submissionPath = path.join(__dirname, '..', 'uploads', 
-                    submission.submissionUrl.split('/').pop()
-                );
-                if (fs.existsSync(submissionPath)) {
-                    fs.unlinkSync(submissionPath);
+        // Delete submission files from Firebase
+        if (assignment.submissions && assignment.submissions.length > 0) {
+            console.log(`Deleting ${assignment.submissions.length} submission files`);
+            for (const submission of assignment.submissions) {
+                if (submission.filePath) {
+                    console.log('Deleting submission file:', submission.filePath);
+                    await deleteFromFirebase(submission.filePath);
                 }
             }
         }
 
-        await Assignment.deleteOne({ _id: assignmentId });
+        // Use deleteOne() instead of remove()
+        await Assignment.deleteOne({ _id: assignment._id });
+        console.log('Assignment deleted successfully');
+
+        // Update classroom to remove the assignment reference
+        await Classroom.updateOne(
+            { assignments: assignment._id },
+            { $pull: { assignments: assignment._id } }
+        );
 
         res.json({
             success: true,
             message: 'Assignment deleted successfully'
         });
+
     } catch (error) {
-        console.error('Error deleting assignment:', error);
+        console.error('Assignment deletion error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to delete assignment'
+            message: error.message || 'Failed to delete assignment'
         });
     }
 });
@@ -820,68 +765,6 @@ router.get('/assignments/:assignmentId/statistics', authMiddleware('Faculty'), a
     }
 });
 
-// Add assignment submission route
-router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), upload.single('file'), async (req, res) => {
-    try {
-        const { assignmentId } = req.params;
-        const studentId = req.user._id;
-
-        if (!req.file) {
-            return res.status(400).json({
-                success: false,
-                message: 'No file uploaded'
-            });
-        }
-
-        const assignment = await Assignment.findById(assignmentId);
-        if (!assignment) {
-            return res.status(404).json({
-                success: false,
-                message: 'Assignment not found'
-            });
-        }
-
-        // Check if submission is before due date
-        if (new Date() > new Date(assignment.dueDate)) {
-            return res.status(400).json({
-                success: false,
-                message: 'Assignment submission deadline has passed'
-            });
-        }
-
-        const submissionFile = `/uploads/submissions/${req.file.filename}`;
-        
-        // Update or create submission
-        const submissionIndex = assignment.submissions.findIndex(
-            sub => sub.student.toString() === studentId.toString()
-        );
-
-        if (submissionIndex > -1) {
-            assignment.submissions[submissionIndex].submissionFile = submissionFile;
-            assignment.submissions[submissionIndex].submittedAt = new Date();
-        } else {
-            assignment.submissions.push({
-                student: studentId,
-                submissionFile,
-                submittedAt: new Date()
-            });
-        }
-
-        await assignment.save();
-
-        res.json({
-            success: true,
-            message: 'Assignment submitted successfully'
-        });
-    } catch (error) {
-        console.error('Submission error:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Failed to submit assignment'
-        });
-    }
-});
-
 // Get assignments for student
 router.get('/student/assignments', authMiddleware('Student'), async (req, res) => {
     try {
@@ -928,37 +811,39 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
             return res.status(404).json({ success: false, message: 'Submission not found' });
         }
 
-        // Fix file path handling
-        const submissionFileName = submission.submissionUrl ? submission.submissionUrl.split('/').pop() : null;
-
-        if (!submissionFileName) {
+        // Check if submission URL exists
+        if (!submission.submissionUrl) {
             return res.status(404).json({
                 success: false,
                 message: 'No submission file found'
             });
         }
 
-        const submissionFilePath = path.join(__dirname, '..', 'uploads', 'submissions', submissionFileName);
+        console.log('Processing submission URL:', submission.submissionUrl);
 
-        console.log('File details:', {
-            submissionUrl: submission.submissionUrl,
-            fileName: submissionFileName,
-            fullPath: submissionFilePath
-        });
-
-        if (!fs.existsSync(submissionFilePath)) {
-            console.error('File not found:', {
-                path: submissionFilePath,
-                submissionUrl: submission.submissionUrl
-            });
-            return res.status(404).json({
-                success: false,
-                message: 'Submission file not found on server'
-            });
+        // Create a temporary directory if it doesn't exist
+        const tempDir = path.join(__dirname, '..', 'temp');
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
         }
 
+        // Generate a temporary file path for the downloaded file
+        const submissionFileName = submission.submissionUrl.split('/').pop();
+        const tempFilePath = path.join(tempDir, submissionFileName);
+
         try {
-            const dataBuffer = fs.readFileSync(submissionFilePath);
+            // Download the file from Firebase URL
+            console.log('Downloading file from Firebase:', submission.submissionUrl);
+            const response = await axios({
+                method: 'get',
+                url: submission.submissionUrl,
+                responseType: 'arraybuffer'
+            });
+
+            // Save the file to the temporary location
+            fs.writeFileSync(tempFilePath, response.data);
+            console.log('File downloaded successfully to:', tempFilePath);
+
             // Read PDF content using pdf2json
             const pdfParser = new PDFParser();
             const pdfContent = await new Promise((resolve, reject) => {
@@ -969,19 +854,19 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
                     resolve(text);
                 });
                 pdfParser.on('pdfParser_dataError', reject);
-                pdfParser.loadPDF(submissionFilePath);
+                pdfParser.loadPDF(tempFilePath);
             });
 
             console.log('PDF Content extracted successfully');
 
-            // Extract text from student's submission
-            const submissionText = await extractPDFText(submissionFilePath);
-            console.log('Student Submission Text:', submissionText);
+            // Extract text from student's submission (using the same function but with temp file)
+            const submissionText = await extractPDFText(tempFilePath);
+            console.log('Student Submission Text extracted, length:', submissionText.length);
 
             // Get ideal answers from assignment
             const idealAnswers = assignment.idealAnswers;
 
-            // Compare with ideal answers
+            // Compare with ideal answers using GROQ API
             const gradingResponse = await axios.post(
                 "https://api.groq.com/openai/v1/chat/completions",
                 {
@@ -1058,6 +943,15 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
                 submission.isAutoGraded = true;
                 await assignment.save();
 
+                // Cleanup: Delete the temporary file
+                try {
+                    fs.unlinkSync(tempFilePath);
+                    console.log('Temporary file deleted successfully');
+                } catch (cleanupError) {
+                    console.error('Error deleting temporary file:', cleanupError);
+                    // Continue even if cleanup fails
+                }
+
                 // Send the converted grade to frontend
                 res.json({
                     success: true,
@@ -1066,17 +960,37 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
                     feedback: aiResponse.feedback
                 });
             } catch (parseError) {
+                // Clean up temp file if parsing fails
+                try {
+                    if (fs.existsSync(tempFilePath)) {
+                        fs.unlinkSync(tempFilePath);
+                    }
+                } catch (cleanupError) {
+                    // Ignore cleanup errors
+                }
+                
                 console.error('Error parsing API response:', parseError);
                 res.status(500).json({
                     success: false,
                     message: 'Failed to parse auto-grading response'
                 });
             }
-        } catch (error) {
-            console.error('File reading error:', error);
+        } catch (fileError) {
+            console.error('File processing error:', fileError);
+            
+            // Clean up temp file if it exists
+            try {
+                if (fs.existsSync(tempFilePath)) {
+                    fs.unlinkSync(tempFilePath);
+                }
+            } catch (cleanupError) {
+                // Ignore cleanup errors
+            }
+            
             return res.status(500).json({
                 success: false,
-                message: 'Error reading submission file'
+                message: 'Error downloading or processing submission file',
+                error: fileError.message
             });
         }
     } catch (error) {
@@ -1084,6 +998,83 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
         res.status(500).json({
             success: false,
             message: 'Failed to auto-grade assignment'
+        });
+    }
+});
+
+// Add or update the submission grading route
+router.post('/grade-submission/:assignmentId/:submissionId', authMiddleware('Faculty'), async (req, res) => {
+    try {
+        const { assignmentId, submissionId } = req.params;
+        const facultyId = req.user._id;
+        
+        console.log(`Grading submission ${submissionId} for assignment ${assignmentId}`);
+        
+        // Find the assignment
+        const assignment = await Assignment.findById(assignmentId);
+        
+        if (!assignment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Assignment not found'
+            });
+        }
+        
+        // Check if faculty is authorized
+        if (assignment.createdBy.toString() !== facultyId.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not authorized to grade this assignment'
+            });
+        }
+        
+        // Find the submission
+        const submission = assignment.submissions.find(
+            sub => sub._id.toString() === submissionId
+        );
+        
+        if (!submission) {
+            return res.status(404).json({
+                success: false,
+                message: 'Submission not found'
+            });
+        }
+        
+        console.log('Found submission:', {
+            studentId: submission.student,
+            submissionUrl: submission.submissionUrl,
+            submittedAt: submission.submittedAt
+        });
+        
+        // Grade the submission
+        const gradingResult = await gradeSubmission(submission, assignment);
+        
+        // Update the submission with grade
+        submission.grade = gradingResult.totalGrade;
+        submission.feedback = gradingResult.overallFeedback;
+        submission.gradingDetails = gradingResult;
+        submission.gradedAt = new Date();
+        submission.gradedBy = facultyId;
+        
+        await assignment.save();
+        
+        // Get student info for notification
+        const student = await User.findById(submission.student);
+        
+        // Send notification if desired
+        // (implementation omitted)
+        
+        res.json({
+            success: true,
+            message: 'Submission graded successfully',
+            grade: gradingResult.totalGrade,
+            feedback: gradingResult.overallFeedback
+        });
+    } catch (error) {
+        console.error('Error grading submission:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to grade submission'
         });
     }
 });

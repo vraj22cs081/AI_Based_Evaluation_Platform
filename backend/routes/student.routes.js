@@ -8,21 +8,11 @@ const User = require('../models/user');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { uploadToFirebase, deleteFromFirebase } = require('../utils/firebaseStorage');
 
-// Configure multer for file upload
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        const dir = 'uploads/submissions';
-        fs.mkdirSync(dir, { recursive: true });
-        cb(null, dir);
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
-});
-
+// Configure multer for memory storage (for Firebase uploads)
 const upload = multer({
-    storage: storage,
+    storage: multer.memoryStorage(),
     limits: {
         fileSize: 5 * 1024 * 1024 // 5MB limit
     },
@@ -35,7 +25,6 @@ const upload = multer({
     }
 });
 
-// Get enrolled classrooms
 router.get('/classrooms/enrolled', authMiddleware('Student'), async (req, res) => {
     try {
         const studentId = req.user._id;
@@ -177,7 +166,7 @@ router.get('/classrooms/:classroomId/assignments', authMiddleware('Student'), as
     }
 });
 
-// File upload route
+// File upload route - Updated to use Firebase
 router.post('/upload', authMiddleware('Student'), upload.single('file'), async (req, res) => {
     try {
         if (!req.file) {
@@ -187,11 +176,15 @@ router.post('/upload', authMiddleware('Student'), upload.single('file'), async (
             });
         }
 
-        const fileUrl = `/uploads/submissions/${req.file.filename}`;
-        
+        // Upload to Firebase instead of local storage
+        console.log('Uploading file to Firebase:', req.file.originalname);
+        const result = await uploadToFirebase(req.file, 'submissions');
+        console.log('File uploaded to Firebase:', result);
+
         res.json({
             success: true,
-            fileUrl,
+            fileUrl: result.fileUrl,
+            filePath: result.path,
             message: 'File uploaded successfully'
         });
     } catch (error) {
@@ -203,7 +196,7 @@ router.post('/upload', authMiddleware('Student'), upload.single('file'), async (
     }
 });
 
-// Submit assignment route
+// Submit assignment route - Updated to use Firebase
 router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), upload.single('file'), async (req, res) => {
     try {
         const { assignmentId } = req.params;
@@ -236,8 +229,10 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), uplo
             });
         }
 
-        // Create submission URL
-        const submissionUrl = `/uploads/submissions/${req.file.filename}`;
+        // Upload to Firebase
+        console.log('Uploading submission to Firebase:', req.file.originalname);
+        const result = await uploadToFirebase(req.file, 'submissions');
+        console.log('Submission uploaded to Firebase:', result);
 
         // Update or create submission
         const submissionIndex = assignment.submissions.findIndex(
@@ -245,27 +240,154 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), uplo
         );
 
         if (submissionIndex > -1) {
-            assignment.submissions[submissionIndex].submissionUrl = submissionUrl;
+            // Check if there's a previous submission to clean up
+            if (assignment.submissions[submissionIndex].filePath) {
+                console.log('Deleting previous submission:', assignment.submissions[submissionIndex].filePath);
+                try {
+                    await deleteFromFirebase(assignment.submissions[submissionIndex].filePath);
+                } catch (deleteError) {
+                    console.error('Error deleting previous submission:', deleteError);
+                    // Continue with the update even if delete fails
+                }
+            }
+            
+            // Update existing submission
+            assignment.submissions[submissionIndex].submissionUrl = result.fileUrl;
+            assignment.submissions[submissionIndex].filePath = result.path;
             assignment.submissions[submissionIndex].submittedAt = new Date();
         } else {
+            // Create new submission
             assignment.submissions.push({
                 student: studentId,
-                submissionUrl: submissionUrl,
+                submissionUrl: result.fileUrl,
+                filePath: result.path,
                 submittedAt: new Date()
             });
         }
 
         await assignment.save();
 
+        // Get student information for notification
+        const student = await User.findById(studentId);
+        
+        // Send email notification if the function exists
+        try {
+            if (typeof sendSubmissionConfirmation === 'function') {
+                await sendSubmissionConfirmation(
+                    student.email,
+                    student.name,
+                    assignment.title,
+                    assignment.classroom.name
+                );
+            }
+        } catch (emailError) {
+            console.error('Error sending submission confirmation email:', emailError);
+            // Continue without failing the submission
+        }
+
         res.json({
             success: true,
-            message: 'Assignment submitted successfully'
+            message: 'Assignment submitted successfully',
+            submission: {
+                submissionUrl: result.fileUrl,
+                submittedAt: new Date()
+            }
         });
     } catch (error) {
         console.error('Submission error:', error);
         res.status(500).json({
             success: false,
             message: 'Failed to submit assignment'
+        });
+    }
+});
+
+// Get assignment details with submission
+router.get('/assignments/:assignmentId', authMiddleware('Student'), async (req, res) => {
+    try {
+        const { assignmentId } = req.params;
+        const studentId = req.user._id;
+
+        const assignment = await Assignment.findById(assignmentId)
+            .populate('classroom', 'name')
+            .populate('createdBy', 'name');
+
+        if (!assignment) {
+            return res.status(404).json({
+                success: false,
+                message: 'Assignment not found'
+            });
+        }
+
+        // Check if student is enrolled in the classroom
+        const classroom = await Classroom.findById(assignment.classroom);
+        
+        if (!classroom) {
+            return res.status(404).json({
+                success: false,
+                message: 'Classroom not found'
+            });
+        }
+
+        // Check if the classroom has a students array
+        if (!classroom.students || !Array.isArray(classroom.students)) {
+            console.log('Classroom has no students array:', classroom);
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid classroom structure'
+            });
+        }
+
+        // Safely check if student is enrolled
+        const isEnrolled = classroom.students.some(student => {
+            // Check if student object and student property are defined
+            return student && student.student && student.student.toString() === studentId.toString();
+        });
+
+        if (!isEnrolled) {
+            return res.status(403).json({
+                success: false,
+                message: 'Not enrolled in this classroom'
+            });
+        }
+
+        // Safely find student's submission
+        let submission = null;
+        if (assignment.submissions && Array.isArray(assignment.submissions)) {
+            submission = assignment.submissions.find(sub => 
+                sub && sub.student && sub.student.toString() === studentId.toString()
+            );
+        }
+
+        // Format response
+        const formattedAssignment = {
+            _id: assignment._id,
+            title: assignment.title,
+            description: assignment.description,
+            dueDate: assignment.dueDate,
+            maxMarks: assignment.maxMarks,
+            assignmentFile: assignment.assignmentFile,
+            classroom: assignment.classroom,
+            createdBy: assignment.createdBy,
+            createdAt: assignment.createdAt,
+            hasSubmitted: !!submission,
+            submission: submission ? {
+                submissionUrl: submission.submissionUrl,
+                submittedAt: submission.submittedAt,
+                grade: submission.grade,
+                feedback: submission.feedback
+            } : null
+        };
+
+        res.json({
+            success: true,
+            assignment: formattedAssignment
+        });
+    } catch (error) {
+        console.error('Error fetching assignment:', error);
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch assignment'
         });
     }
 });

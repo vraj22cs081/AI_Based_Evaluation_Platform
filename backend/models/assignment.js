@@ -10,6 +10,10 @@ const submissionSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    filePath: {
+        type: String,
+        required: true
+    },
     submittedAt: {
         type: Date,
         default: Date.now
@@ -19,10 +23,6 @@ const submissionSchema = new mongoose.Schema({
     },
     feedback: {
         type: String
-    },
-    isAutoGraded: {
-        type: Boolean,
-        default: false
     }
 });
 
@@ -43,6 +43,14 @@ const assignmentSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
+    assignmentFile: {
+        type: String,
+        required: true
+    },
+    filePath: {
+        type: String,
+        required: false
+    },
     classroom: {
         type: mongoose.Schema.Types.ObjectId,
         ref: 'Classroom',
@@ -54,15 +62,33 @@ const assignmentSchema = new mongoose.Schema({
         required: true
     },
     submissions: [submissionSchema],
-    assignmentFile: {
-        type: String
-    },
     idealAnswers: {
         type: Object,
-        required: true
+        required: true,
+        default: {
+            questions: [{
+                questionNumber: 1,
+                idealAnswer: "Please review manually",
+                keyPoints: ["Manual review required"],
+                maxMarks: 100,
+                markingCriteria: ["Review submission thoroughly"]
+            }],
+            totalMarks: 100
+        }
     }
 }, {
     timestamps: true
+});
+
+// Pre-save hook to ensure filePath is set
+assignmentSchema.pre('save', function(next) {
+    // If filePath is not set but assignmentFile is available, derive filePath from URL
+    if ((!this.filePath || this.filePath === 'undefined') && this.assignmentFile) {
+        const urlParts = this.assignmentFile.split('/');
+        this.filePath = `assignments/${urlParts[urlParts.length - 1]}`;
+        console.log('Derived filePath before save:', this.filePath);
+    }
+    next();
 });
 
 module.exports = mongoose.model('Assignment', assignmentSchema);

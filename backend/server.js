@@ -13,6 +13,8 @@ const facultyRoutes = require('./routes/faculty.routes');
 const path = require('path');
 const uploadRoutes = require('./routes/upload.routes');
 const errorHandler = require('./middleware/error.middleware');
+const { bucket } = require('./config/firebase.config');
+const fs = require('fs');
 
 dotenv.config();
 
@@ -37,6 +39,13 @@ mongoose.connect(process.env.MONGODB_URI)
 // Serve static files from uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Create temp directory for file processing
+const tempDir = path.join(__dirname, 'temp');
+if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+    console.log('Created temp directory for file processing');
+}
+
 // Routes
 app.use('/api/auth', Signuproutes);
 app.use('/api/admin', adminRoutes);
@@ -60,6 +69,25 @@ app.get('/api/auth/status', (req, res) => {
         });
     } catch (error) {
         res.json({ isAuthenticated: false });
+    }
+});
+
+// Add this route temporarily to test Firebase configuration
+app.get('/api/test-firebase', async (req, res) => {
+    try {
+        const [files] = await bucket.getFiles();
+        res.json({ 
+            success: true, 
+            message: 'Firebase connection successful',
+            files: files.map(f => f.name)
+        });
+    } catch (error) {
+        console.error('Firebase test error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Firebase connection failed',
+            error: error.message 
+        });
     }
 });
 

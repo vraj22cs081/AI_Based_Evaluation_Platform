@@ -208,19 +208,21 @@ const StudentDashboard = () => {
         }
     };
 
-    // Add this function with your other handlers
-    const handleViewSubmission = (assignment) => {
+    // Update the file viewing function
+    const handleViewFile = (fileUrl) => {
         try {
-            // First check if submission exists and has a URL
-            if (assignment.submission?.submissionUrl) {
-                const submissionUrl = getBaseUrl(assignment.submission.submissionUrl);
-                window.open(submissionUrl, '_blank');
-            } else {
-                setError('No submission file available');
+            if (!fileUrl) {
+                console.error('No file URL provided');
+                return;
             }
+            
+            console.log('Opening file URL:', fileUrl);
+            
+            // Directly open the URL in a new tab
+            window.open(fileUrl, '_blank');
         } catch (error) {
-            console.error('Error viewing submission:', error);
-            setError('Failed to open submission file');
+            console.error('Error viewing file:', error);
+            setError('Error opening file');
         }
     };
 
@@ -777,7 +779,7 @@ const StudentDashboard = () => {
     {assignment.assignmentFile ? (
         <button 
             className="btn btn-sm btn-outline-secondary icon-button"
-            onClick={() => window.open(getBaseUrl(assignment.assignmentFile), '_blank')}
+            onClick={() => handleViewFile(assignment.assignmentFile)}
             title="View Reference Document"
         >
             <i className="fas fa-file-pdf me-2"></i>
@@ -822,7 +824,7 @@ const StudentDashboard = () => {
         {assignment.submission ? (
             <button 
                 className="btn btn-sm btn-outline-primary w-100"
-                onClick={() => handleViewSubmission(assignment)}
+                onClick={() => handleViewFile(assignment.submission.submissionUrl)}
                 title="View Submitted Document"
             >
                 <i className="fas fa-eye"></i>
