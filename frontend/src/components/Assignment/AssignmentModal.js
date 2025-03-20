@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
+import './AssignmentModal.css';
 
 const AssignmentModal = ({ isEdit, initialData, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
@@ -65,118 +66,111 @@ const AssignmentModal = ({ isEdit, initialData, onClose, onSubmit }) => {
     };
 
     return (
-        <div className="modal-overlay" style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000
-        }}>
-            <div className="modal-content" style={{
-                width: '90%',
-                maxWidth: '500px',
-                maxHeight: '90vh',
-                overflowY: 'auto',
-                padding: '1.5rem',
-                backgroundColor: 'white',
-                borderRadius: '0.75rem',
-                boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-                position: 'relative',
-                zIndex: 1001
-            }}>
-                {/* Header */}
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                    <h2 className="h5 mb-0">{isEdit ? 'Edit Assignment' : 'Create Assignment'}</h2>
-                    <button onClick={onClose} className="btn-close"></button>
+        <div className="assignment-modal-overlay">
+            <div className="assignment-modal-content">
+                <div className="assignment-modal-header">
+                    <h2 className="assignment-modal-title">
+                        <i className={`fas ${isEdit ? 'fa-edit' : 'fa-plus-circle'}`}></i>
+                        {isEdit ? 'Edit Assignment' : 'Create Assignment'}
+                    </h2>
                 </div>
 
-                {/* Form */}
-                <form onSubmit={handleSubmit} className="d-flex flex-column gap-3">
-                    {/* Title */}
-                    <div>
-                        <label className="form-label small">Title</label>
+                <form onSubmit={handleSubmit}>
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-heading"></i>
+                            Title
+                        </label>
                         <input
                             type="text"
                             name="title"
+                            className="form-input"
                             value={formData.title}
                             onChange={handleChange}
-                            className="form-control"
                             required
                         />
                     </div>
 
-                    {/* Description */}
-                    <div>
-                        <label className="form-label small">Description</label>
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-align-left"></i>
+                            Description
+                        </label>
                         <textarea
                             name="description"
+                            className="form-input"
                             value={formData.description}
                             onChange={handleChange}
-                            className="form-control"
-                            rows="3"
+                            rows="4"
                             required
                         />
                     </div>
 
-                    {/* Due Date and Max Marks in one row */}
-                    <div className="row">
-                        <div className="col-md-6">
-                            <label className="form-label small">Due Date</label>
+                    <div className="form-row">
+                        <div className="form-group">
+                            <label className="form-label">
+                                <i className="fas fa-calendar"></i>
+                                Due Date
+                            </label>
                             <input
                                 type="datetime-local"
                                 name="dueDate"
+                                className="form-input"
                                 value={formData.dueDate}
                                 onChange={handleChange}
-                                className="form-control"
                                 required
                             />
                         </div>
-                        <div className="col-md-6">
-                            <label className="form-label small">Max Marks</label>
+
+                        <div className="form-group">
+                            <label className="form-label">
+                                <i className="fas fa-star"></i>
+                                Maximum Marks
+                            </label>
                             <input
                                 type="number"
                                 name="maxMarks"
+                                className="form-input"
                                 value={formData.maxMarks}
                                 onChange={handleChange}
-                                className="form-control"
                                 required
+                                min="0"
                             />
                         </div>
                     </div>
 
-                    {/* File Upload */}
-                    <div>
-                        <label className="form-label small">Assignment File (PDF only, max 5MB)</label>
-                        <div className="border rounded p-3 text-center bg-light">
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-file-pdf"></i>
+                            Assignment PDF
+                        </label>
+                        <div 
+                            className="file-upload-area"
+                            onClick={() => document.getElementById('file-input').click()}
+                        >
+                            <i className="fas fa-cloud-upload-alt file-upload-icon"></i>
+                            <div>Click or drag to upload PDF</div>
                             <input
+                                id="file-input"
                                 type="file"
                                 accept=".pdf"
                                 onChange={handleFileChange}
-                                id="file-input"
                                 style={{ display: 'none' }}
                             />
-                            <label htmlFor="file-input" className="mb-0" style={{ cursor: 'pointer' }}>
-                                <i className="bi bi-cloud-upload fs-4 text-primary"></i>
-                                <div className="small mt-1">
-                                    {file ? file.name : 'Click to upload PDF'}
-                                </div>
-                            </label>
+                            {file && <div className="file-name">{file.name}</div>}
                         </div>
-                        {error && <div className="text-danger small mt-1">{error}</div>}
+                        {error && <div className="error-text">{error}</div>}
                     </div>
 
-                    {/* Buttons */}
-                    <div className="d-flex justify-content-end gap-2 mt-3">
-                        <button type="button" className="btn btn-light" onClick={onClose}>
+                    <div className="button-container">
+                        <button type="button" className="btn-cancel" onClick={onClose}>
+                            <i className="fas fa-times"></i>
                             Cancel
                         </button>
-                        <button type="submit" className="btn btn-primary" disabled={uploading}>
-                            {uploading ? (isEdit ? 'Updating...' : 'Creating...') : (isEdit ? 'Update Assignment' : 'Create Assignment')}
+                        <button type="submit" className="btn-submit" disabled={uploading}>
+                            <i className="fas fa-save"></i>
+                            {uploading ? (isEdit ? 'Updating...' : 'Creating...') : 
+                                       (isEdit ? 'Update Assignment' : 'Create Assignment')}
                         </button>
                     </div>
                 </form>

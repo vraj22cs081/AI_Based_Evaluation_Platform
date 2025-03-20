@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import LoadingSpinner from '../LoadingSpinner';
 import { getBaseUrl } from '../../config/api.config';
+import './GradeSubmissionModal.css';
 
 const GradeSubmissionModal = ({ assignment, submission, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
@@ -31,123 +32,38 @@ const GradeSubmissionModal = ({ assignment, submission, onClose, onSubmit }) => 
     };
 
     return (
-        <div className="modal-overlay" style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            zIndex: 1050
-        }}>
-            <div className="modal-content" style={{
-                backgroundColor: 'white',
-                borderRadius: '12px',
-                padding: '2rem',
-                width: '90%',
-                maxWidth: '500px',
-                position: 'relative',
-                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                animation: 'modalFadeIn 0.3s ease'
-            }}>
+        <div className="grade-modal-overlay">
+            <div className="grade-modal-content">
                 {error && (
                     <div className="alert alert-danger mb-3">{error}</div>
                 )}
-                <div className="modal-header" style={{
-                    borderBottom: '1px solid #e5e7eb',
-                    padding: '1rem 0',
-                    marginBottom: '1.5rem'
-                }}>
-                    <h2 style={{
-                        fontSize: '1.5rem',
-                        fontWeight: '600',
-                        color: '#1f2937'
-                    }}>Grade Submission</h2>
-                    <button 
-                        onClick={onClose}
-                        style={{
-                            position: 'absolute',
-                            top: '1rem',
-                            right: '1rem',
-                            border: 'none',
-                            background: 'none',
-                            fontSize: '1.5rem',
-                            color: '#6b7280',
-                            cursor: 'pointer'
-                        }}
-                    >&times;</button>
+                <div className="grade-header">
+                    <h2 className="grade-title">
+                        <i className="fas fa-check-circle"></i>
+                        Grade Submission
+                    </h2>
+                    <button className="close-button" onClick={onClose}>
+                        <i className="fas fa-times"></i>
+                    </button>
                 </div>
 
-                <div style={{ marginBottom: '1.5rem' }}>
-                    <h3 style={{ fontSize: '1.1rem', color: '#374151' }}>{assignment.title}</h3>
-                    <p style={{ color: '#6b7280', fontSize: '0.9rem' }}>
-                        Maximum Marks: {assignment.maxMarks}
-                    </p>
-                </div>
-
-                <div style={{ 
-                    marginBottom: '1.5rem',
-                    padding: '1rem',
-                    backgroundColor: '#f9fafb',
-                    borderRadius: '0.5rem',
-                    border: '1px solid #e5e7eb'
-                }}>
-                    <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '0.75rem'
-                    }}>
-                        <h4 style={{ 
-                            fontSize: '0.875rem',
-                            fontWeight: '600',
-                            color: '#4b5563'
-                        }}>Student Submission</h4>
-                        <span style={{
-                            fontSize: '0.75rem',
-                            color: '#6b7280'
-                        }}>
-                            Submitted: {new Date(submission.submittedAt).toLocaleString()}
-                        </span>
+                <div className="grade-details">
+                    <div className="detail-group">
+                        <label className="detail-label">
+                            <i className="fas fa-clock me-2"></i>
+                            Submitted On
+                        </label>
+                        <div className="detail-value">
+                            {new Date(submission.submittedAt).toLocaleString()}
+                        </div>
                     </div>
-
-                    {submission.submissionUrl && (
-                        <a
-                            href={getBaseUrl(`${submission.submissionUrl}`)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="btn btn-sm d-flex align-items-center gap-2"
-                            style={{
-                                width: 'fit-content',
-                                backgroundColor: '#f3f4f6',
-                                color: '#4b5563',
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '6px',
-                                padding: '8px 16px',
-                                transition: 'all 0.2s ease',
-                                textDecoration: 'none',
-                                fontSize: '0.875rem',
-                                fontWeight: '500',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem'
-                            }}
-                            onMouseOver={(e) => {
-                                e.currentTarget.style.backgroundColor = '#e5e7eb';
-                                e.currentTarget.style.color = '#1f2937';
-                            }}
-                            onMouseOut={(e) => {
-                                e.currentTarget.style.backgroundColor = '#f3f4f6';
-                                e.currentTarget.style.color = '#4b5563';
-                            }}
-                        >
-                            <i className="bi bi-file-earmark-text" style={{ color: '#6366f1' }}></i>
-                            View Submission Document
-                        </a>
-                    )}
+                    <div className="detail-group">
+                        <label className="detail-label">
+                            <i className="fas fa-star me-2"></i>
+                            Maximum Marks
+                        </label>
+                        <div className="detail-value">{assignment.maxMarks}</div>
+                    </div>
                 </div>
 
                 {loading ? (
@@ -162,90 +78,36 @@ const GradeSubmissionModal = ({ assignment, submission, onClose, onSubmit }) => 
                 ) : (
                     <>
                         <form onSubmit={handleSubmit}>
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{
-                                    display: 'block',
-                                    marginBottom: '0.5rem',
-                                    fontSize: '0.875rem',
-                                    fontWeight: '500',
-                                    color: '#374151'
-                                }}>Grade (out of {assignment.maxMarks})</label>
+                            <div className="grade-form-group">
+                                <label className="grade-label">Grade</label>
                                 <input
                                     type="number"
-                                    min="0"
-                                    max={assignment.maxMarks}
+                                    className="grade-input"
                                     value={formData.grade}
                                     onChange={(e) => setFormData({...formData, grade: e.target.value})}
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem',
-                                        borderRadius: '0.375rem',
-                                        border: '1px solid #d1d5db',
-                                        outline: 'none',
-                                        transition: 'border-color 0.2s'
-                                    }}
+                                    min="0"
+                                    max={assignment.maxMarks}
                                     required
                                 />
                             </div>
 
-                            <div style={{ marginBottom: '1.5rem' }}>
-                                <label style={{
-                                    display: 'block',
-                                    marginBottom: '0.5rem',
-                                    fontSize: '0.875rem',
-                                    fontWeight: '500',
-                                    color: '#374151'
-                                }}>Feedback</label>
+                            <div className="grade-form-group">
+                                <label className="grade-label">Feedback</label>
                                 <textarea
+                                    className="feedback-textarea"
                                     value={formData.feedback}
                                     onChange={(e) => setFormData({...formData, feedback: e.target.value})}
-                                    rows="4"
-                                    style={{
-                                        width: '100%',
-                                        padding: '0.75rem',
-                                        borderRadius: '0.375rem',
-                                        border: '1px solid #d1d5db',
-                                        outline: 'none',
-                                        transition: 'border-color 0.2s'
-                                    }}
+                                    placeholder="Enter feedback for the student..."
                                 />
                             </div>
 
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'flex-end',
-                                gap: '1rem',
-                                marginTop: '2rem'
-                            }}>
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    disabled={loading}
-                                    style={{
-                                        padding: '0.75rem 1.5rem',
-                                        borderRadius: '0.375rem',
-                                        border: '1px solid #d1d5db',
-                                        backgroundColor: 'white',
-                                        color: '#374151',
-                                        cursor: 'pointer',
-                                        opacity: loading ? '0.5' : '1'
-                                    }}
-                                >
+                            <div className="button-container">
+                                <button type="button" className="cancel-button" onClick={onClose}>
+                                    <i className="fas fa-times"></i>
                                     Cancel
                                 </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading}
-                                    style={{
-                                        padding: '0.75rem 1.5rem',
-                                        borderRadius: '0.375rem',
-                                        border: 'none',
-                                        backgroundColor: '#6366f1',
-                                        color: 'white',
-                                        cursor: 'pointer',
-                                        opacity: loading ? '0.5' : '1'
-                                    }}
-                                >
+                                <button type="submit" className="submit-button" disabled={loading}>
+                                    <i className="fas fa-save"></i>
                                     {loading ? 'Saving...' : 'Submit Grade'}
                                 </button>
                             </div>

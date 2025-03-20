@@ -16,6 +16,7 @@ import LandingPage from "./components/LandingPage/LandingPage";
 // import ClassroomList from "./components/Classroom/ClassroomList";
 // import CreateClassroom from "./components/Classroom/CreateClassroom";
 import { UpdateProvider } from './context/UpdateContext';
+import About from './components/About/About';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
     const { isAuthenticated, userRole, loading } = useAuth();
@@ -79,6 +80,7 @@ function App() {
                                 </ProtectedRoute>
                             }
                         />
+                        <Route path="/about" element={<About />} />
                         {/* <Route path="/classroom/:id/student-assignments" element={
                             <ProtectedRoute allowedRoles={["Student"]}>
                                 <StudentAssignmentList />

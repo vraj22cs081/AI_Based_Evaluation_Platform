@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { getApiUrl } from '../../config/api.config';
+import './AssignmentEditModal.css';
 
 const AssignmentEditModal = ({ assignment, onClose, onSubmit }) => {
     const [formData, setFormData] = useState({
@@ -70,98 +71,113 @@ const AssignmentEditModal = ({ assignment, onClose, onSubmit }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                <h2 className="text-xl font-semibold mb-4">Edit Assignment</h2>
+        <div className="assignment-modal-overlay">
+            <div className="assignment-modal-content">
+                <div className="assignment-modal-header">
+                    <h2 className="assignment-modal-title">
+                        <i className="fas fa-edit"></i>
+                        Edit Assignment
+                    </h2>
+                </div>
                 
                 <form onSubmit={handleSubmit}>
-                    <div className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Title</label>
-                            <input
-                                type="text"
-                                value={formData.title}
-                                onChange={(e) => setFormData({...formData, title: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                required
-                            />
-                        </div>
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-heading"></i>
+                            Title
+                        </label>
+                        <input
+                            type="text"
+                            className="form-input"
+                            value={formData.title}
+                            onChange={(e) => setFormData({...formData, title: e.target.value})}
+                            required
+                        />
+                    </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Description</label>
-                            <textarea
-                                value={formData.description}
-                                onChange={(e) => setFormData({...formData, description: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                rows="4"
-                                required
-                            />
-                        </div>
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-align-left"></i>
+                            Description
+                        </label>
+                        <textarea
+                            className="form-input"
+                            value={formData.description}
+                            onChange={(e) => setFormData({...formData, description: e.target.value})}
+                            rows="4"
+                            required
+                        />
+                    </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Due Date</label>
-                            <input
-                                type="datetime-local"
-                                value={formData.dueDate}
-                                onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                required
-                            />
-                        </div>
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-calendar"></i>
+                            Due Date
+                        </label>
+                        <input
+                            type="datetime-local"
+                            className="form-input"
+                            value={formData.dueDate}
+                            onChange={(e) => setFormData({...formData, dueDate: e.target.value})}
+                            required
+                        />
+                    </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Maximum Marks</label>
-                            <input
-                                type="number"
-                                value={formData.maxMarks}
-                                onChange={(e) => setFormData({...formData, maxMarks: e.target.value})}
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                required
-                                min="0"
-                            />
-                        </div>
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-star"></i>
+                            Maximum Marks
+                        </label>
+                        <input
+                            type="number"
+                            className="form-input"
+                            value={formData.maxMarks}
+                            onChange={(e) => setFormData({...formData, maxMarks: e.target.value})}
+                            required
+                            min="0"
+                        />
+                    </div>
 
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">
-                                Update Assignment PDF (Optional)
+                    <div className="form-group">
+                        <label className="form-label">
+                            <i className="fas fa-file-pdf"></i>
+                            Update Assignment PDF
+                        </label>
+                        <div className="file-input-wrapper">
+                            <label className="file-input-label">
+                                <i className="fas fa-upload"></i>
+                                <span>Choose file</span>
+                                <input
+                                    type="file"
+                                    accept=".pdf"
+                                    onChange={handleFileChange}
+                                    style={{ display: 'none' }}
+                                />
                             </label>
-                            <input
-                                type="file"
-                                accept=".pdf"
-                                onChange={handleFileChange}
-                                className="mt-1 block w-full text-sm text-gray-500
-                                    file:mr-4 file:py-2 file:px-4
-                                    file:rounded-full file:border-0
-                                    file:text-sm file:font-semibold
-                                    file:bg-blue-50 file:text-blue-700
-                                    hover:file:bg-blue-100"
-                            />
-                            {error && (
-                                <p className="text-red-500 text-sm mt-1">{error}</p>
-                            )}
+                            {file && <div className="file-info">{file.name}</div>}
+                            {error && <div className="error-text">{error}</div>}
                         </div>
-
-                        <div>
-                            <p className="text-sm text-gray-600">
-                                Current file: <a href={assignment.assignmentFile} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700">View</a>
-                            </p>
+                        <div className="file-info">
+                            Current file: <a href={assignment.assignmentFile} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700">View</a>
                         </div>
                     </div>
 
-                    <div className="mt-6 flex justify-end gap-4">
+                    <div className="button-container">
                         <button
                             type="button"
+                            className="btn-cancel"
                             onClick={onClose}
-                            className="px-4 py-2 text-gray-700 hover:text-gray-900"
                             disabled={uploading}
                         >
+                            <i className="fas fa-times"></i>
                             Cancel
                         </button>
                         <button
                             type="submit"
-                            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 disabled:bg-blue-300"
+                            className="btn-submit"
                             disabled={uploading}
                         >
+                            <i className="fas fa-save"></i>
                             {uploading ? 'Updating...' : 'Update Assignment'}
                         </button>
                     </div>
@@ -171,4 +187,4 @@ const AssignmentEditModal = ({ assignment, onClose, onSubmit }) => {
     );
 };
 
-export default AssignmentEditModal; 
+export default AssignmentEditModal;

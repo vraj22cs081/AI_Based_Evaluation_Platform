@@ -921,55 +921,38 @@ const FacultyDashboard = () => {
         }
     };
 
-    const handleAutoGrade = async (assignmentId, submissionId) => {
-        try {
-            const sessionId = sessionStorage.getItem('sessionId');
-            const token = sessionStorage.getItem(`token_${sessionId}`);
+    const [isProcessing, setIsProcessing] = useState(false);
 
-            const response = await axios.post(
-                getApiUrl(`/faculty/assignments/${assignmentId}/submissions/${submissionId}/autograde`),
-                {},
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'X-Session-ID': sessionId
-                    }
+const handleAutoGrade = async (assignmentId, submissionId) => {
+    try {
+        setIsProcessing(true); // Set loading state to true before processing
+        const sessionId = sessionStorage.getItem('sessionId');
+        const token = sessionStorage.getItem(`token_${sessionId}`);
+
+        setAutoGradingStatus(prev => ({ ...prev, [submissionId]: 'processing' }));
+
+        const response = await axios.post(
+            getApiUrl(`/faculty/assignments/${assignmentId}/submissions/${submissionId}/autograde`),
+            {},
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'X-Session-ID': sessionId
                 }
-            );
-
-            if (response.data.success) {
-                setSuccess('Assignment auto-graded successfully');
-                
-                // Update the assignments state with new grade
-                setAssignments(prevAssignments => 
-                    prevAssignments.map(assignment => {
-                        if (assignment._id === assignmentId) {
-                            const updatedSubmissions = assignment.submissions.map(sub => {
-                                if (sub._id === submissionId) {
-                                    console.log('Received grade from backend:', response.data.grade);
-                                    return {
-                                        ...sub,
-                                        grade: parseInt(response.data.grade),
-                                        feedback: response.data.feedback,
-                                        isAutoGraded: true,
-                                        status: 'graded'
-                                    };
-                                }
-                                return sub;
-                            });
-                            return { ...assignment, submissions: updatedSubmissions };
-                        }
-                        return assignment;
-                    })
-                );
-                
-                // Force a re-render
-                triggerUpdate();
             }
-        } catch (error) {
-            setError(error.response?.data?.message || 'Failed to auto-grade assignment');
+        );
+
+        if (response.data.success) {
+            setSuccess('Assignment auto-graded successfully');
+            triggerUpdate();
         }
-    };
+    } catch (error) {
+        setError(error.response?.data?.message || 'Failed to auto-grade assignment');
+    } finally {
+        setIsProcessing(false); // Reset loading state
+        setAutoGradingStatus(prev => ({ ...prev, [submissionId]: 'completed' }));
+    }
+};
 
     // Add this function to your component to handle batch grading
 
@@ -1179,18 +1162,14 @@ const handleBatchAutoGrade = async () => {
                                         
                                         {/* Manual Grade button - Keep as is */}
                                         <button 
-                                            className="btn btn-sm btn-outline-primary"
+                                            className="btn btn-sm btn-outline-primary submission-action-btn"
                                             onClick={() => {
                                                 setSelectedSubmission(submission);
-                                                setGradeModalData({
-                                                    grade: submission.grade || '',
-                                                    feedback: submission.feedback || ''
-                                                });
                                                 setShowGradeModal(true);
                                             }}
                                         >
-                                            <i className={(submission.grade !== null && submission.grade !== undefined) ? "fas fa-edit" : "fas fa-check"}></i>
-                                            {(submission.grade !== null && submission.grade !== undefined) ? ' Update' : ' Grade'}
+                                            <i className={submission.grade !== undefined ? "fas fa-edit" : "fas fa-check"}></i>
+                                            <span>{submission.grade !== undefined ? 'Update' : 'Grade'}</span>
                                         </button>
                                     </div>
                                 </td>
@@ -1283,12 +1262,47 @@ const handleBatchAutoGrade = async () => {
         );
     };
 
+    const [isWebsiteLoading, setIsWebsiteLoading] = useState(true);
+
+    // Add this useEffect at the top level of your component
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsWebsiteLoading(false);
+        }, 1500); // Adjust time as needed
+    
+        return () => clearTimeout(timer);
+    }, []);
+
     if (loading) {
         return <LoadingSpinner />;
     }
 
     return (
         <div className="relative">
+            {isWebsiteLoading && (
+                <div className="website-loading-overlay">
+                    <div className="loading-content">
+                        <div className="loading-spinner">
+                            <i className="fas fa-graduation-cap"></i>
+                        </div>
+                        <h2 className="loading-text">Loading Your Dashboard</h2>
+                        <p className="loading-subtext">Please wait while we set things up...</p>
+                    </div>
+                </div>
+            )}
+            
+            {isProcessing && (
+                <div className="processing-overlay">
+                    <div className="processing-content">
+                        <div className="processing-spinner">
+                            <i className="fas fa-robot fa-spin"></i>
+                        </div>
+                        <h4>AI is evaluating...</h4>
+                        <p className="text-muted">Please wait while we process the submission</p>
+                    </div>
+                </div>
+            )}
+            
             <div className="min-vh-100 bg-light">
                 <Header 
                     userName={userName}
@@ -1296,11 +1310,11 @@ const handleBatchAutoGrade = async () => {
                 />
                 
                 <div className="container-fluid pt-4" style={{ 
-                    marginTop: '80px', 
+                    marginTop: '70px', 
                     paddingLeft: '5px',
                     paddingRight: '5px',
                     maxWidth: '98%',
-                    margin: '80px auto 0'
+                    margin: '70px auto 0'
                 }}>
                     {error && <Notification type="error" message={error} onClose={() => setError('')} />}
                     {success && <Notification type="success" message={success} onClose={() => setSuccess('')} />}
@@ -2210,10 +2224,6 @@ const handleBatchAutoGrade = async () => {
                                                                                     className="btn btn-sm btn-outline-primary submission-action-btn"
                                                                                     onClick={() => {
                                                                                         setSelectedSubmission(submission);
-                                                                                        setGradeModalData({
-                                                                                            grade: submission.grade || '',
-                                                                                            feedback: submission.feedback || ''
-                                                                                        });
                                                                                         setShowGradeModal(true);
                                                                                     }}
                                                                                 >
@@ -2537,10 +2547,15 @@ const handleBatchAutoGrade = async () => {
                     <div className="modal-content">
                         <GradeSubmissionModal
                             assignment={selectedAssignment}
-                            submission={selectedSubmission}
+                            submission={{
+                                ...selectedSubmission,
+                                grade: gradeModalData?.grade || selectedSubmission.grade,
+                                feedback: gradeModalData?.feedback || selectedSubmission.feedback
+                            }}
                             onClose={() => {
                                 setShowGradeModal(false);
                                 setSelectedSubmission(null);
+                                setGradeModalData(null);  // Reset modal data
                             }}
                             onSubmit={handleGradeSubmission}
                         />
@@ -2564,7 +2579,6 @@ const handleBatchAutoGrade = async () => {
                 </div>
             )}
 
-            {renderGradeModal()}
         </div>
     );
 };

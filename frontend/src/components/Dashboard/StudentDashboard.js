@@ -36,6 +36,8 @@ const StudentDashboard = () => {
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const [selectedFeedback, setSelectedFeedback] = useState(null);
 
+    const [isWebsiteLoading, setIsWebsiteLoading] = useState(true);
+
     // Fetch assignment counts for each classroom
     const fetchAssignmentCount = async (classroomId) => {
         try {
@@ -208,10 +210,17 @@ const StudentDashboard = () => {
 
     // Add this function with your other handlers
     const handleViewSubmission = (assignment) => {
-        if (assignment.submission?.submissionFile) {
-            window.open(getBaseUrl(assignment.submission.submissionFile), '_blank');
-        } else {
-            setError('No submission file found');
+        try {
+            // First check if submission exists and has a URL
+            if (assignment.submission?.submissionUrl) {
+                const submissionUrl = getBaseUrl(assignment.submission.submissionUrl);
+                window.open(submissionUrl, '_blank');
+            } else {
+                setError('No submission file available');
+            }
+        } catch (error) {
+            console.error('Error viewing submission:', error);
+            setError('Failed to open submission file');
         }
     };
 
@@ -342,21 +351,41 @@ const StudentDashboard = () => {
         }
     }, [assignments]);
 
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setIsWebsiteLoading(false);
+        }, 1500); // Adjust time as needed
+
+        return () => clearTimeout(timer);
+    }, []);
+
     if (loading) {
         return <LoadingSpinner />;
     }
 
     return (
         <div className="relative">
+            {isWebsiteLoading && (
+                <div className="website-loading-overlay">
+                    <div className="loading-content">
+                        <div className="loading-spinner">
+                            <i className="fas fa-graduation-cap"></i>
+                        </div>
+                        <h2 className="loading-text">Loading Your Dashboard</h2>
+                        <p className="loading-subtext">Please wait while we set things up...</p>
+                    </div>
+                </div>
+            )}
+            
             <div className="min-vh-100 bg-light">
                 <Header />
                 
                 <div className="container-fluid pt-4" style={{ 
-    marginTop: '80px', 
+    marginTop: '70px', 
     paddingLeft: '5px',    // Reduced from 10px
     paddingRight: '5px',   // Reduced from 10px
     maxWidth: '98%',       // This will create some margin on both sides
-    margin: '80px auto 0'  // Centers the container and maintains top margin
+    margin: '70px auto 0'  // Centers the container and maintains top margin
 }}>
                     {error && <Notification type="error" message={error} onClose={() => setError('')} />}
                     {success && <Notification type="success" message={success} onClose={() => setSuccess('')} />}
@@ -787,31 +816,33 @@ const StudentDashboard = () => {
     )}
 </td>
 
-                    <td data-label="Actions" className="d-none d-md-table-cell text-center">
-                        <div className="action-buttons">
-                            {assignment.submission ? (
-                                <button 
-                                    className="btn btn-sm btn-outline-primary w-100"
-                                    onClick={() => handleViewSubmission(assignment)}
-                                    title={assignment.submission?.submissionFile ? "View Submitted Document" : "No submission file"}
-                                >
-                                    <i className="fas fa-eye"></i>
-                                    <span className="d-none d-md-inline ms-1">
-                                        View Submission
-                                    </span>
-                                </button>
-                            ) : (
-                                <button
-                                    className="btn btn-sm btn-primary w-100"
-                                    onClick={() => handleSubmitAssignment(assignment)}
-                                    disabled={isAssignmentOverdue(assignment.dueDate)}
-                                >
-                                    <i className="fas fa-upload"></i>
-                                    <span className="d-none d-md-inline ms-1">Submit</span>
-                                </button>
-                            )}
-                        </div>
-                    </td>
+{/* Add view submission button */}
+<td data-label="Actions" className="text-center">
+    <div className="action-buttons">
+        {assignment.submission ? (
+            <button 
+                className="btn btn-sm btn-outline-primary w-100"
+                onClick={() => handleViewSubmission(assignment)}
+                title="View Submitted Document"
+            >
+                <i className="fas fa-eye"></i>
+                <span className="d-none d-md-inline ms-1">
+                    View Submission
+                </span>
+            </button>
+        ) : (
+            <button
+                className="btn btn-sm btn-primary w-100"
+                onClick={() => handleSubmitAssignment(assignment)}
+                disabled={isAssignmentOverdue(assignment.dueDate)}
+            >
+                <i className="fas fa-upload"></i>
+                <span className="d-none d-md-inline ms-1">Submit</span>
+            </button>
+        )}
+    </div>
+</td>
+
                 </tr>
             ))}
         </tbody>
@@ -841,12 +872,12 @@ const StudentDashboard = () => {
             {/* Move modals here and update styling */}
             {showJoinModal && (
                 <div className="modal-overlay">
-                    <div className="modal-content">
+                   
                         <JoinClassroomModal
                             onClose={() => setShowJoinModal(false)}
                             onSubmit={handleJoinClassroom}
                         />
-                    </div>
+                  
                 </div>
             )}
 
