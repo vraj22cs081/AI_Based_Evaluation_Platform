@@ -10,5 +10,4 @@ build/
 # System files
 .DS_Store
 
-# Firebase
-serviceAccountKey.json
+
