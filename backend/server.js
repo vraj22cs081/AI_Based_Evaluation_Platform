@@ -54,7 +54,7 @@ app.use('/api/faculty', facultyRoutes);
 // app.use('/api/assignments', assignmentRoutes);
 app.use('/api/upload', uploadRoutes);
 
-app.get('/api/auth/status', (req, res) => {
+app.get('/api/auth/status', (req, res) => { 
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) {
         return res.json({ isAuthenticated: false });
