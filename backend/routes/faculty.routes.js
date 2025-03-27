@@ -7,7 +7,7 @@ const Assignment = require('../models/assignment');
 const path = require('path');
 const fs = require('fs');
 const nodemailer = require('nodemailer');
-const { sendInviteEmail, notifyNewAssignment, notifyGradePosted } = require('../utils/emailService');
+const { sendInviteEmail, notifyNewAssignment, notifyGradePosted, notifyAIGradePosted, notifyClassroomUpdated, notifyAssignmentUpdated, notifyAssignmentCreated } = require('../utils/emailService');
 const multer = require('multer');
 const PDFParser = require('pdf2json');
 const axios = require('axios');
@@ -127,7 +127,7 @@ router.put('/classrooms/:classroomId', authMiddleware('Faculty'), async (req, re
         const classroom = await Classroom.findOne({
             _id: classroomId,
             faculty: facultyId
-        });
+        }).populate('students', 'name email');
 
         if (!classroom) {
             return res.status(404).json({
@@ -136,12 +136,37 @@ router.put('/classrooms/:classroomId', authMiddleware('Faculty'), async (req, re
             });
         }
 
+        // Store old name for comparison
+        const oldName = classroom.name;
+        
         // Update classroom details
         classroom.name = name || classroom.name;
         classroom.subject = subject || classroom.subject;
         classroom.description = description || classroom.description;
 
         await classroom.save();
+
+        // Send update notifications to existing students if name or subject changed
+        if (classroom.students.length > 0 && (oldName !== classroom.name || req.body.subject !== undefined)) {
+            try {
+                // Create promises for sending emails to all enrolled students
+                const updateEmailPromises = classroom.students.map(student => 
+                    notifyClassroomUpdated(
+                        student.email,
+                        student.name,
+                        classroom.name,
+                        faculty.name
+                    )
+                );
+                
+                // Execute all emails in parallel
+                await Promise.all(updateEmailPromises);
+                console.log('Classroom update notifications sent to existing students');
+            } catch (emailError) {
+                console.error('Error sending classroom update notifications:', emailError);
+                // Continue execution even if emails fail
+            }
+        }
 
         // Ensure studentEmails is an array before processing
         if (Array.isArray(studentEmails) && studentEmails.length > 0) {
@@ -329,53 +354,29 @@ router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), a
             description,
             dueDate,
             maxMarks,
-            assignmentFile,
-            filePath
+            hasFile: !!assignmentFile
         });
 
-        // Validate required fields
-        if (!title || !description || !dueDate || !maxMarks || !assignmentFile) {
-            return res.status(400).json({
+        // Verify classroom belongs to faculty
+        const classroom = await Classroom.findOne({
+            _id: classroomId,
+            faculty: facultyId
+        }).populate('students', 'name email');
+
+        if (!classroom) {
+            return res.status(404).json({
                 success: false,
-                message: 'All fields are required'
+                message: 'Classroom not found or unauthorized'
             });
         }
 
-        // If filePath is undefined or missing, extract it from assignmentFile URL
-        let storedFilePath = filePath;
-        if (!storedFilePath || storedFilePath === 'undefined') {
-            // Extract path from URL, assuming URL format from Firebase
-            const urlParts = assignmentFile.split('/');
-            storedFilePath = `assignments/${urlParts[urlParts.length - 1]}`;
-            console.log('Generated filePath from URL:', storedFilePath);
+        // Process and store assignment file path
+        let storedFilePath = '';
+        if (filePath) {
+            storedFilePath = filePath;
         }
 
-        // Extract text from PDF for ideal answers
-        let idealAnswers;
-        try {
-            console.log('Starting PDF extraction');
-            const assignmentText = await extractTextFromPdf(assignmentFile);
-            console.log(`Extracted ${assignmentText.length} characters from PDF`);
-            
-            // Generate ideal answers using GROQ
-            idealAnswers = await generateIdealAnswers(title, description, assignmentText, parseInt(maxMarks));
-            console.log('Successfully generated ideal answers using GROQ');
-        } catch (error) {
-            console.error('Error generating ideal answers:', error);
-            // Default ideal answers if generation fails
-            idealAnswers = {
-                questions: [{
-                    questionNumber: 1,
-                    idealAnswer: "Please review the assignment manually.",
-                    keyPoints: ["Manual review required"],
-                    maxMarks: parseInt(maxMarks),
-                    markingCriteria: ["Review submission thoroughly"]
-                }],
-                totalMarks: parseInt(maxMarks)
-            };
-        }
-
-        // Create the assignment
+        // Create an assignment
         const assignment = new Assignment({
             title,
             description,
@@ -385,7 +386,6 @@ router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), a
             filePath: storedFilePath,
             classroom: classroomId,
             createdBy: facultyId,
-            idealAnswers
         });
 
         await assignment.save();
@@ -396,6 +396,27 @@ router.post('/classrooms/:classroomId/assignments', authMiddleware('Faculty'), a
             classroomId,
             { $push: { assignments: assignment._id } }
         );
+
+        // Send email notifications to all enrolled students
+        if (classroom.students && classroom.students.length > 0) {
+            try {
+                const emailPromises = classroom.students.map(student => 
+                    notifyAssignmentCreated(
+                        student.email,
+                        student.name,
+                        assignment.title,
+                        assignment.dueDate,
+                        classroom.name
+                    )
+                );
+                
+                await Promise.all(emailPromises);
+                console.log('Assignment creation notifications sent to all students');
+            } catch (emailError) {
+                console.error('Error sending assignment creation notifications:', emailError);
+                // Continue execution even if emails fail
+            }
+        }
 
         res.json({
             success: true,
@@ -677,8 +698,25 @@ router.put('/assignments/:assignmentId', authMiddleware('Faculty'), async (req, 
         const classroom = await Classroom.findById(assignment.classroom)
             .populate('students', 'email name');
         
-        for (const student of classroom.students) {
-            await notifyNewAssignment([student], assignment, classroom.name);
+        // Send update notifications to all enrolled students
+        if (classroom.students.length > 0) {
+            try {
+                const updateEmailPromises = classroom.students.map(student => 
+                    notifyAssignmentUpdated(
+                        student.email,
+                        student.name,
+                        assignment.title,
+                        assignment.dueDate,
+                        classroom.name
+                    )
+                );
+                
+                await Promise.all(updateEmailPromises);
+                console.log('Assignment update notifications sent to all students');
+            } catch (emailError) {
+                console.error('Error sending assignment update notifications:', emailError);
+                // Continue execution even if emails fail
+            }
         }
 
         res.json({
@@ -799,7 +837,7 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
     try {
         const { assignmentId, submissionId } = req.params;
         const assignment = await Assignment.findById(assignmentId)
-            .populate('submissions.student', 'name')
+            .populate('submissions.student', 'name email')
             .populate('classroom', 'name');
 
         if (!assignment) {
@@ -950,6 +988,26 @@ router.post('/assignments/:assignmentId/submissions/:submissionId/autograde', au
                 } catch (cleanupError) {
                     console.error('Error deleting temporary file:', cleanupError);
                     // Continue even if cleanup fails
+                }
+
+                // After a successful auto-grading, get the student details
+                const student = await User.findById(submission.student);
+                
+                // Send AI-specific grade notification
+                try {
+                    await notifyAIGradePosted(
+                        student.email,
+                        student.name,
+                        assignment.title,
+                        submission.grade,
+                        assignment.maxMarks,
+                        submission.feedback,
+                        assignment.classroom.name
+                    );
+                    console.log('AI grade notification sent successfully');
+                } catch (emailError) {
+                    console.error('Error sending AI grade notification:', emailError);
+                    // Don't fail if email sending fails
                 }
 
                 // Send the converted grade to frontend

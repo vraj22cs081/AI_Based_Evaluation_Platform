@@ -276,6 +276,7 @@ router.post('/assignments/:assignmentId/submit', authMiddleware('Student'), uplo
                 await sendSubmissionConfirmation(
                     student.email,
                     student.name,
+                    assignment.createdBy.email,
                     assignment.title,
                     assignment.classroom.name
                 );

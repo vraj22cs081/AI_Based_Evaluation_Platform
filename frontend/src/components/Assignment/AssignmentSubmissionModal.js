@@ -47,12 +47,8 @@ const AssignmentSubmissionModal = ({ assignment, onClose, onSubmitSuccess }) => 
             const sessionId = sessionStorage.getItem('sessionId');
             const token = sessionStorage.getItem(`token_${sessionId}`);
             
-            // Create form data with field name 'file' for multer
             const formData = new FormData();
             formData.append('file', selectedFile);
-            
-            console.log('Submitting assignment:', assignment._id);
-            console.log('File to upload:', selectedFile.name, selectedFile.type, selectedFile.size);
             
             const response = await axios.post(
                 getApiUrl(`/student/assignments/${assignment._id}/submit`),
@@ -66,18 +62,14 @@ const AssignmentSubmissionModal = ({ assignment, onClose, onSubmitSuccess }) => 
                 }
             );
             
-            console.log('Submission response:', response.data);
-            
             if (response.data.success) {
                 setSuccess('Assignment submitted successfully');
                 
-                // Wait a bit to show success message
+                // Wait a bit to show success message, then close and trigger refresh
                 setTimeout(() => {
                     onClose();
-                    if (onSubmitSuccess) onSubmitSuccess();
+                    window.location.reload(); // This will refresh the page
                 }, 1500);
-            } else {
-                throw new Error(response.data.message || 'Failed to submit assignment');
             }
         } catch (error) {
             console.error('Submission error:', error);

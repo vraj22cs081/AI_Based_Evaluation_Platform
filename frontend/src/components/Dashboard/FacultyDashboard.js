@@ -2216,13 +2216,13 @@ const handleBatchAutoGrade = async () => {
                                                                                 {/* View submission button */}
                                                                                 {submission.submissionUrl && submission.submissionUrl.trim() !== '' && (
                                                                                     <a 
-                                                                                        href={getBaseUrl(submission.submissionUrl)}
+                                                                                        href={submission.submissionUrl}
                                                                                         target="_blank" 
                                                                                         rel="noopener noreferrer"
                                                                                         className="btn btn-sm btn-outline-secondary submission-action-btn"
                                                                                         onClick={(e) => {
                                                                                             // Add validation before opening
-                                                                                            const url = getBaseUrl(submission.submissionUrl);
+                                                                                            const url = (submission.submissionUrl);
                                                                                             if (!url) {
                                                                                                 e.preventDefault();
                                                                                                 setError('Invalid submission URL');

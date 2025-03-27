@@ -167,9 +167,41 @@ const StudentDashboard = () => {
         }
     };
 
-    const handleSubmitAssignment = (assignment) => {
+    // Update the handleSubmitAssignment function
+    const handleSubmitAssignment = async (assignment) => {
         setSelectedAssignment(assignment);
         setShowSubmissionModal(true);
+        
+        // Add a listener for successful submission
+        const checkSubmissionStatus = setInterval(async () => {
+            try {
+                const sessionId = sessionStorage.getItem('sessionId');
+                const token = sessionStorage.getItem(`token_${sessionId}`);
+                
+                const response = await axios.get(
+                    getApiUrl(`/student/assignments/${assignment._id}`),
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'X-Session-ID': sessionId
+                        }
+                    }
+                );
+                
+                if (response.data.assignment.submission) {
+                    clearInterval(checkSubmissionStatus);
+                    setSelectedAssignment(null);
+                    setShowSubmissionModal(false);
+                    await fetchAssignments(selectedClassroom._id);
+                    triggerUpdate();
+                }
+            } catch (error) {
+                console.error('Error checking submission status:', error);
+            }
+        }, 2000); // Check every 2 seconds
+
+        // Clear the interval when the modal is closed
+        return () => clearInterval(checkSubmissionStatus);
     };
 
     const handleLogout = async () => {
@@ -360,6 +392,16 @@ const StudentDashboard = () => {
 
         return () => clearTimeout(timer);
     }, []);
+
+    // Add this useEffect to handle submission success
+    useEffect(() => {
+        if (showSubmissionModal === false && selectedAssignment === null) {
+            // Refresh assignments when modal is closed after submission
+            if (selectedClassroom) {
+                fetchAssignments(selectedClassroom._id);
+            }
+        }
+    }, [showSubmissionModal, selectedAssignment]);
 
     if (loading) {
         return <LoadingSpinner />;
