@@ -1,5 +1,7 @@
 const admin = require('firebase-admin');
 const serviceAccount = require('/etc/secrets/serviceAccountKey.json');
+// const serviceAccount = require('./serviceAccountKey.json');
+
 
 if (!process.env.FIREBASE_STORAGE_BUCKET) {
     throw new Error('FIREBASE_STORAGE_BUCKET environment variable is not set');
